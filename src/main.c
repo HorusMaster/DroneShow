@@ -5,6 +5,13 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "mpu6050.h"
+#include <math.h>
+#include "wifi_module.h"
+#include "nvs_flash.h"
+#include "esp_event.h"
+#include "esp_system.h"
+#include "esp_netif.h"
+#include "mqtt_module.h"
 
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_SDA_IO 21
@@ -17,10 +24,12 @@
 static mpu6050_handle_t mpu6050 = NULL;
 static const char *TAG = "mpu6050";
 
-void blink_task(void *pvParameter) {
+void blink_task(void *pvParameter)
+{
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
 
-    while (1) {
+    while (1)
+    {
         gpio_set_level(BLINK_GPIO, 0);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
         gpio_set_level(BLINK_GPIO, 1);
@@ -28,18 +37,48 @@ void blink_task(void *pvParameter) {
     }
 }
 
+typedef struct
+{
+    float pitch;
+    float roll;
+    float yaw;
+} euler_angles_t;
 
-void mpu6050_task(void *pvParameters) {   
+static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_value_t gyro)
+{
+    euler_angles_t angles;
+
+    // Calculate roll and pitch from accelerometer data
+    angles.roll = atan2(acce.acce_y, acce.acce_z) * 180 / M_PI;
+    angles.pitch = atan2(-acce.acce_x, sqrt(acce.acce_y * acce.acce_y + acce.acce_z * acce.acce_z)) * 180 / M_PI;
+
+    // Yaw calculation requires integrating the gyroscope data
+    static float previous_yaw = 0;
+    float dt = 0.5; // Assuming a fixed delay of 500ms between readings
+
+    angles.yaw = previous_yaw + gyro.gyro_z * dt;
+    previous_yaw = angles.yaw;
+
+    return angles;
+}
+
+void mpu6050_task(void *pvParameters)
+{
     mpu6050_acce_value_t acce;
     mpu6050_gyro_value_t gyro;
     mpu6050_temp_value_t temp;
-    while (1) {
+    while (1)
+    {
         mpu6050_get_acce(mpu6050, &acce);
         ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f", acce.acce_x, acce.acce_y, acce.acce_z);
         mpu6050_get_gyro(mpu6050, &gyro);
         ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f", gyro.gyro_x, gyro.gyro_y, gyro.gyro_z);
         mpu6050_get_temp(mpu6050, &temp);
         ESP_LOGI(TAG, "t:%.2f \n", temp.temp);
+
+        euler_angles_t angles = get_euler_angles(acce, gyro);
+        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f", angles.pitch, angles.roll, angles.yaw);
+
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -56,7 +95,7 @@ static void i2c_bus_init(void)
     conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
 
     i2c_param_config(I2C_MASTER_NUM, &conf);
-    i2c_driver_install(I2C_MASTER_NUM, conf.mode, 0, 0, 0);    
+    i2c_driver_install(I2C_MASTER_NUM, conf.mode, 0, 0, 0);
 }
 
 /**
@@ -64,27 +103,36 @@ static void i2c_bus_init(void)
  */
 static void i2c_sensor_mpu6050_init(void)
 {
-    //esp_err_t ret;
+    // esp_err_t ret;
     i2c_bus_init();
     mpu6050 = mpu6050_create(I2C_MASTER_NUM, MPU6050_I2C_ADDRESS);
-    mpu6050_config(mpu6050, ACCE_FS_4G, GYRO_FS_500DPS);      
+    mpu6050_config(mpu6050, ACCE_FS_4G, GYRO_FS_500DPS);
     mpu6050_wake_up(mpu6050);
 }
 
-extern "C" void app_main() {
+void app_main()
+{
     esp_err_t ret;
-    uint8_t mpu6050_deviceid;     
-
-    ESP_LOGI(TAG, "Initializing I2C...");      
-    i2c_sensor_mpu6050_init();    
-    ret = mpu6050_get_deviceid(mpu6050, &mpu6050_deviceid);    
-    ESP_LOGI(TAG, "mpuinit  %i", ret);        
-    xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);   
+    uint8_t mpu6050_deviceid;
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    init_wifi();
+    init_mqtt();
+    ESP_LOGI(TAG, "Initializing I2C...");
+    i2c_sensor_mpu6050_init();
+    ret = mpu6050_get_deviceid(mpu6050, &mpu6050_deviceid);
+    ESP_LOGI(TAG, "mpuinit  %i", ret);
+    xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
-    //mpu6050_delete(mpu6050);
+    // mpu6050_delete(mpu6050);
 }
-
-
 
 // MPU6050 mpu;
 // QueueHandle_t mpu6050_data_queue;
