@@ -12,21 +12,22 @@
 #include "esp_system.h"
 #include "esp_netif.h"
 #include "mqtt_module.h"
-#include "lwip/inet.h"
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include "dshot.h"
+#include "bmx280.h"
 
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_NUM I2C_NUM_0
 #define I2C_MASTER_FREQ_HZ 100000
+
 #define MPU6050_ADDR 0x68
+#define BMP280_ADDR 0x76
 
 #define BLINK_GPIO GPIO_NUM_2
 
 static mpu6050_handle_t mpu6050 = NULL;
+static bmx280_t *bmx280 = NULL;
 static const char *TAG = "main";
 
 void blink_task(void *pvParameter)
@@ -47,9 +48,10 @@ typedef struct
     float pitch;
     float roll;
     float yaw;
+    float altitude;
 } euler_angles_t;
 
-static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_value_t gyro)
+static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_value_t gyro, float altitude)
 {
     euler_angles_t angles;
 
@@ -64,7 +66,15 @@ static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_v
     angles.yaw = previous_yaw + gyro.gyro_z * dt;
     previous_yaw = angles.yaw;
 
+    angles.altitude = altitude;
+
     return angles;
+}
+
+float calculate_altitude(float pressure)
+{
+    const float sea_level_pressure = 1013.25; // Presión a nivel del mar en hPa
+    return 44330.0 * (1.0 - pow(pressure / sea_level_pressure, 0.1903));
 }
 
 void mpu6050_task(void *pvParameters)
@@ -72,30 +82,28 @@ void mpu6050_task(void *pvParameters)
     char message[100];
     mpu6050_acce_value_t acce;
     mpu6050_gyro_value_t gyro;
-    mpu6050_temp_value_t temp;
+    mpu6050_temp_value_t temp;    
     // Iniciar los ESCs enviando un throttle de cero por un tiempo
 
     while (1)
-    {
-        mpu6050_get_acce(mpu6050, &acce);
-        ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f", acce.acce_x, acce.acce_y, acce.acce_z);
-        mpu6050_get_gyro(mpu6050, &gyro);
-        ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f", gyro.gyro_x, gyro.gyro_y, gyro.gyro_z);
+    {       
+        float temp_env = 0, pres = 0, hum = 0;
+        ESP_ERROR_CHECK(bmx280_readoutFloat(bmx280, &temp_env, &pres, &hum));        
+        float pressure_hPa = pres / 100.0; // Convertir de Pa a hPa
+        float altitude = calculate_altitude(pressure_hPa);
+        mpu6050_get_acce(mpu6050, &acce);       
+        mpu6050_get_gyro(mpu6050, &gyro);        
         mpu6050_get_temp(mpu6050, &temp);
-        ESP_LOGI(TAG, "t:%.2f \n", temp.temp);
-
-        euler_angles_t angles = get_euler_angles(acce, gyro);
-        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f", angles.pitch, angles.roll, angles.yaw);
+        euler_angles_t angles = get_euler_angles(acce, gyro, altitude);
+        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", angles.pitch, angles.roll, angles.yaw, angles.altitude, temp_env);
 
         // Crear mensaje JSON con los valores de pitch, roll y yaw
-
-        snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f}", angles.pitch, angles.roll, angles.yaw);
+        snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", angles.pitch, angles.roll, angles.yaw, angles.altitude);
         // Aquí podrías agregar la lógica para ajustar el throttle según los ángulos calculados.
         // Por ejemplo, puedes mapear los ángulos a valores de throttle y enviar esos valores a los ESCs.
 
         // Enviar mensaje a través de MQTT
         // send_message(message);
-
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -110,9 +118,8 @@ static void i2c_bus_init(void)
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
     conf.master.clk_speed = I2C_MASTER_FREQ_HZ;
     conf.clk_flags = I2C_SCLK_SRC_FLAG_FOR_NOMAL;
-
-    i2c_param_config(I2C_MASTER_NUM, &conf);
-    i2c_driver_install(I2C_MASTER_NUM, conf.mode, 0, 0, 0);
+    ESP_ERROR_CHECK(i2c_param_config(I2C_MASTER_NUM, &conf));
+    ESP_ERROR_CHECK(i2c_driver_install(I2C_MASTER_NUM, I2C_MODE_MASTER, 0, 0, 0));
 }
 
 /**
@@ -120,12 +127,26 @@ static void i2c_bus_init(void)
  */
 static void i2c_sensor_mpu6050_init(void)
 {
-    // esp_err_t ret;
-    i2c_bus_init();
     mpu6050 = mpu6050_create(I2C_MASTER_NUM, MPU6050_I2C_ADDRESS);
     mpu6050_config(mpu6050, ACCE_FS_4G, GYRO_FS_500DPS);
     mpu6050_wake_up(mpu6050);
 }
+
+static void i2c_sensor_bmp280_init(void)
+{   
+    bmx280_config_t bmx_cfg = BMX280_DEFAULT_CONFIG;
+    bmx280 = bmx280_create(I2C_NUM_0);
+    if (!bmx280) { 
+        ESP_LOGE("test", "Could not create bmx280 driver.");
+        return;
+    }
+    
+    ESP_ERROR_CHECK(bmx280_init(bmx280));    
+    ESP_ERROR_CHECK(bmx280_configure(bmx280, &bmx_cfg));
+    ESP_ERROR_CHECK(bmx280_setMode(bmx280, BMX280_MODE_FORCE));
+    
+}
+
 
 static void init_escs(void)
 {
@@ -197,7 +218,9 @@ void app_main()
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     // init_mqtt();
+    i2c_bus_init();
     i2c_sensor_mpu6050_init();
+    i2c_sensor_bmp280_init();
     init_wifi();
     init_escs();
 
