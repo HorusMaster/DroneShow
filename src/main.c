@@ -152,6 +152,7 @@ void mpu6050_task(void *pvParameters)
             continue; // Si falla, continuar al siguiente ciclo
         }
         float pressure_hPa = pres / 100.0; // Convertir de Pa a hPa
+        // TODO filter kalman altitud and others
         float altitude = calculate_altitude(pressure_hPa);
         mpu6050_get_acce(mpu6050, &acce);       
         mpu6050_get_gyro(mpu6050, &gyro);        
@@ -195,7 +196,7 @@ void mpu6050_task(void *pvParameters)
 
         // Enviar mensaje a través de MQTT
         // send_message(message);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
