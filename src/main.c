@@ -142,6 +142,9 @@ void mpu6050_task(void *pvParameters)
     while (1)
     {       
         float temp_env = 0, pres = 0, hum = 0;
+        do {
+            vTaskDelay(pdMS_TO_TICKS(1));
+        } while (bmx280_isSampling(bmx280));
         ESP_ERROR_CHECK(bmx280_readoutFloat(bmx280, &temp_env, &pres, &hum));        
         float pressure_hPa = pres / 100.0; // Convertir de Pa a hPa
         float altitude = calculate_altitude(pressure_hPa);
@@ -164,8 +167,6 @@ void mpu6050_task(void *pvParameters)
         uint16_t throttle_base = (uint16_t)pid_output_altitude;
         if (throttle_base > 2047) {
             throttle_base = 2047;
-        } else if (throttle_base < 0) {
-            throttle_base = 0;
         }
         
         uint16_t motor1_throttle = throttle_base + pid_output_pitch - pid_output_roll + pid_output_yaw;
