@@ -127,41 +127,6 @@ static void i2c_sensor_mpu6050_init(void)
     mpu6050_wake_up(mpu6050);
 }
 
-void test_socket_connection(void *pvParameters)
-{
-    const char *host = "192.168.0.116";
-    const int port = 1883;
-
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_addr.s_addr = inet_addr(host);
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-
-    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (sock < 0)
-    {
-        ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
-        vTaskDelete(NULL);
-        return;
-    }
-    ESP_LOGI(TAG, "Socket created, connecting to %s:%d", host, port);
-
-    int err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
-    if (err != 0)
-    {
-        ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
-        close(sock);
-        vTaskDelete(NULL);
-        return;
-    }
-    ESP_LOGI(TAG, "Successfully connected");
-
-    // Close the socket and clean up
-    close(sock);
-    ESP_LOGI(TAG, "Socket closed");
-    vTaskDelete(NULL);
-}
-
 static void init_escs(void)
 {
     dshot_config_t config1 = {
@@ -192,26 +157,22 @@ static void init_escs(void)
     };
     dshot_init(&config4);
 
-    ESP_LOGI(TAG, "ESCs initialized");    
+    ESP_LOGI(TAG, "ESCs initialized");
     vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
 }
 
 void esc_task(void *pvParameters)
 {
     // Incrementar el valor de throttle gradualmente
-    // for (uint16_t thro = 100; thro < 500; thro += 10) {
-    //     dshot_set_throttle(ESC_GPIO_PIN_2, thro, false);        
-    //     vTaskDelay(pdMS_TO_TICKS(1000));
-    // }
-    static uint16_t throttle_value = 100; // Iniciar con el valor mínimo para encender el motor 
+    static uint16_t throttle_value = 100; // Iniciar con el valor mínimo para encender el motor
     while (1)
     {
-        dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);        
+        dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);
 
         ESP_LOGI(TAG, "Throttle value: %d", throttle_value);
 
         // Incrementar el valor de throttle hasta un máximo de 2047
-        if (throttle_value < 500)
+        if (throttle_value < 200)
         {
             throttle_value += 10; // Incrementar en pasos de 50
         }
@@ -219,33 +180,30 @@ void esc_task(void *pvParameters)
         {
             throttle_value = 100; // Reiniciar a 48 después de alcanzar el máximo
         }
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 
+        vTaskDelay(pdMS_TO_TICKS(1000)); //
     }
 }
 
 void app_main()
 {
-    // esp_err_t ret;
-    // ret = nvs_flash_init();
-    // if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    // {
-    //     ESP_ERROR_CHECK(nvs_flash_erase());
-    //     ret = nvs_flash_init();
-    // }
-    // ESP_ERROR_CHECK(ret);
-    // ESP_ERROR_CHECK(esp_netif_init());
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());
-    // init_wifi();
+    esp_err_t ret;
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     // init_mqtt();
-    // ESP_LOGI(TAG, "Initializing I2C...");
     i2c_sensor_mpu6050_init();
+    init_wifi();
     init_escs();
-   
 
-    // xTaskCreate(&test_socket_connection, "test_socket_connection", 4096, NULL, 5, NULL);
     xTaskCreate(esc_task, "esc_task", 4096, NULL, 5, NULL);
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
-    //xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
+    xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
     // mpu6050_delete(mpu6050);
 }
 
