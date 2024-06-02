@@ -12,11 +12,11 @@
 #include "esp_system.h"
 #include "esp_netif.h"
 #include "mqtt_module.h"
-
 #include "lwip/inet.h"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include "dshot.h"
 
 
 #define I2C_MASTER_SCL_IO 22
@@ -28,7 +28,7 @@
 #define BLINK_GPIO GPIO_NUM_2
 
 static mpu6050_handle_t mpu6050 = NULL;
-static const char *TAG = "mpu6050";
+static const char *TAG = "main";
 
 void blink_task(void *pvParameter)
 {
@@ -69,10 +69,20 @@ static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_v
 }
 
 void mpu6050_task(void *pvParameters)
-{
+{   
+    char message[100];
     mpu6050_acce_value_t acce;
     mpu6050_gyro_value_t gyro;
     mpu6050_temp_value_t temp;
+    // Incrementar el valor de throttle gradualmente
+    static uint16_t throttle_value = 48; // Iniciar con el valor mínimo para encender el motor
+    // Iniciar los ESCs enviando un throttle de cero por un tiempo
+    ESP_LOGI(TAG, "Start ESC by sending zero throttle for a while...");
+    dshot_set_throttle2(ESC_GPIO_PIN_1, 0, false);
+    dshot_set_throttle2(ESC_GPIO_PIN_2, 0, false);
+    dshot_set_throttle2(ESC_GPIO_PIN_3, 0, false);
+    dshot_set_throttle2(ESC_GPIO_PIN_4, 0, false);
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Espera 5 segundos
     while (1)
     {
         mpu6050_get_acce(mpu6050, &acce);
@@ -86,11 +96,26 @@ void mpu6050_task(void *pvParameters)
         ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f", angles.pitch, angles.roll, angles.yaw);
 
         // Crear mensaje JSON con los valores de pitch, roll y yaw
-        char message[100];
+        
         snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f}", angles.pitch, angles.roll, angles.yaw);
+        // Aquí podrías agregar la lógica para ajustar el throttle según los ángulos calculados.
+        // Por ejemplo, puedes mapear los ángulos a valores de throttle y enviar esos valores a los ESCs.
+        dshot_set_throttle(ESC_GPIO_PIN_1, throttle_value, false);
+        dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);
+        dshot_set_throttle(ESC_GPIO_PIN_3, throttle_value, false);
+        dshot_set_throttle(ESC_GPIO_PIN_4, throttle_value, false);
+
+        ESP_LOGI(TAG, "Throttle value: %d", throttle_value);
+
+        // Incrementar el valor de throttle hasta un máximo de 2047
+        if (throttle_value < 2047) {
+            throttle_value += 50; // Incrementar en pasos de 50
+        } else {
+            throttle_value = 48; // Reiniciar a 48 después de alcanzar el máximo
+        }
         
         // Enviar mensaje a través de MQTT
-        send_message(message);
+        //send_message(message);
 
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -134,7 +159,8 @@ void test_socket_connection(void *pvParameters)
     dest_addr.sin_port = htons(port);
 
     int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
         vTaskDelete(NULL);
         return;
@@ -142,7 +168,8 @@ void test_socket_connection(void *pvParameters)
     ESP_LOGI(TAG, "Socket created, connecting to %s:%d", host, port);
 
     int err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
-    if (err != 0) {
+    if (err != 0)
+    {
         ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
         close(sock);
         vTaskDelete(NULL);
@@ -154,6 +181,39 @@ void test_socket_connection(void *pvParameters)
     close(sock);
     ESP_LOGI(TAG, "Socket closed");
     vTaskDelete(NULL);
+}
+
+static void init_escs(void)
+{
+    dshot_config_t config1 = {
+        .gpio_num = ESC_GPIO_PIN_1,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config1);
+
+    dshot_config_t config2 = {
+        .gpio_num = ESC_GPIO_PIN_2,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config2);
+
+    dshot_config_t config3 = {
+        .gpio_num = ESC_GPIO_PIN_3,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config3);
+
+    dshot_config_t config4 = {
+        .gpio_num = ESC_GPIO_PIN_4,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config4);
+
+    ESP_LOGI(TAG, "ESCs initialized");
 }
 
 void app_main()
@@ -169,13 +229,14 @@ void app_main()
     ESP_ERROR_CHECK(ret);
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    init_wifi();
-    init_mqtt();
+    //init_wifi();
+    //init_mqtt();
     ESP_LOGI(TAG, "Initializing I2C...");
     i2c_sensor_mpu6050_init();
     ret = mpu6050_get_deviceid(mpu6050, &mpu6050_deviceid);
     ESP_LOGI(TAG, "mpuinit  %i", ret);
-    xTaskCreate(&test_socket_connection, "test_socket_connection", 4096, NULL, 5, NULL);
+    init_escs();
+    // xTaskCreate(&test_socket_connection, "test_socket_connection", 4096, NULL, 5, NULL);
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
     // mpu6050_delete(mpu6050);

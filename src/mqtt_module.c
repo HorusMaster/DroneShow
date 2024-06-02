@@ -24,10 +24,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 void init_mqtt(void)
 {
-    const char *mqtt_host = "192.168.0.116";
-
     // Agregar un retraso antes de iniciar MQTT
-    vTaskDelay(pdMS_TO_TICKS(5000)); // 5 segundos de retraso
+    vTaskDelay(pdMS_TO_TICKS(1000)); // 5 segundos de retraso
 
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = "mqtt://192.168.0.116:1883",  // Actualiza con la IP de tu máquina Windows
