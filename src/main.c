@@ -51,6 +51,60 @@ typedef struct
     float altitude;
 } euler_angles_t;
 
+typedef struct {
+    float kp;
+    float ki;
+    float kd;
+    float setpoint;
+    float integral;
+    float previous_error;
+} pid_controller_t;
+
+pid_controller_t pid_altitude = {
+    .kp = 1.0, // Ajusta estos valores según sea necesario
+    .ki = 0.5,
+    .kd = 0.1,
+    .setpoint = 1.0, // Altitud deseada en metros
+    .integral = 0,
+    .previous_error = 0
+};
+
+pid_controller_t pid_pitch = {
+    .kp = 1.0,
+    .ki = 0.5,
+    .kd = 0.1,
+    .setpoint = 0.0, // Pitch deseado en grados
+    .integral = 0,
+    .previous_error = 0
+};
+
+pid_controller_t pid_roll = {
+    .kp = 1.0,
+    .ki = 0.5,
+    .kd = 0.1,
+    .setpoint = 0.0, // Roll deseado en grados
+    .integral = 0,
+    .previous_error = 0
+};
+
+pid_controller_t pid_yaw = {
+    .kp = 1.0,
+    .ki = 0.5,
+    .kd = 0.1,
+    .setpoint = 0.0, // Yaw deseado en grados
+    .integral = 0,
+    .previous_error = 0
+};
+
+float pid_compute(pid_controller_t *pid, float current_value) {
+    float error = pid->setpoint - current_value;
+    pid->integral += error;
+    float derivative = error - pid->previous_error;
+    float output = pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
+    pid->previous_error = error;
+    return output;
+}
+
 static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_value_t gyro, float altitude)
 {
     euler_angles_t angles;
@@ -101,6 +155,37 @@ void mpu6050_task(void *pvParameters)
         snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", angles.pitch, angles.roll, angles.yaw, angles.altitude);
         // Aquí podrías agregar la lógica para ajustar el throttle según los ángulos calculados.
         // Por ejemplo, puedes mapear los ángulos a valores de throttle y enviar esos valores a los ESCs.
+        float pid_output_altitude = pid_compute(&pid_altitude, altitude);
+        float pid_output_pitch = pid_compute(&pid_pitch, angles.pitch);
+        float pid_output_roll = pid_compute(&pid_roll, angles.roll);
+        float pid_output_yaw = pid_compute(&pid_yaw, angles.yaw);
+
+        // Ajustar el throttle y los motores según los outputs de los PIDs
+        uint16_t throttle_base = (uint16_t)pid_output_altitude;
+        if (throttle_base > 2047) {
+            throttle_base = 2047;
+        } else if (throttle_base < 0) {
+            throttle_base = 0;
+        }
+        
+        uint16_t motor1_throttle = throttle_base + pid_output_pitch - pid_output_roll + pid_output_yaw;
+        uint16_t motor2_throttle = throttle_base + pid_output_pitch + pid_output_roll - pid_output_yaw;
+        uint16_t motor3_throttle = throttle_base - pid_output_pitch + pid_output_roll + pid_output_yaw;
+        uint16_t motor4_throttle = throttle_base - pid_output_pitch - pid_output_roll - pid_output_yaw;
+
+        // Limitar los valores de throttle a 2047
+        if (motor1_throttle > 2047) motor1_throttle = 2047;
+        if (motor2_throttle > 2047) motor2_throttle = 2047;
+        if (motor3_throttle > 2047) motor3_throttle = 2047;
+        if (motor4_throttle > 2047) motor4_throttle = 2047;
+
+        // Imprimir valores de throttle de cada motor
+        ESP_LOGI(TAG, "Throttle Motors: M1: %d, M2: %d, M3: %d, M4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
+        
+        dshot_set_throttle(ESC_GPIO_PIN_1, motor1_throttle, false);
+        dshot_set_throttle(ESC_GPIO_PIN_2, motor2_throttle, false);
+        dshot_set_throttle(ESC_GPIO_PIN_3, motor3_throttle, false);
+        dshot_set_throttle(ESC_GPIO_PIN_4, motor4_throttle, false);
 
         // Enviar mensaje a través de MQTT
         // send_message(message);
@@ -182,28 +267,28 @@ static void init_escs(void)
     vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
 }
 
-void esc_task(void *pvParameters)
-{
-    // Incrementar el valor de throttle gradualmente
-    static uint16_t throttle_value = 100; // Iniciar con el valor mínimo para encender el motor
-    while (1)
-    {
-        dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);
+// void esc_task(void *pvParameters)
+// {
+//     // Incrementar el valor de throttle gradualmente
+//     static uint16_t throttle_value = 100; // Iniciar con el valor mínimo para encender el motor
+//     while (1)
+//     {
+//         dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);
 
-        ESP_LOGI(TAG, "Throttle value: %d", throttle_value);
+//         ESP_LOGI(TAG, "Throttle value: %d", throttle_value);
 
-        // Incrementar el valor de throttle hasta un máximo de 2047
-        if (throttle_value < 200)
-        {
-            throttle_value += 10; // Incrementar en pasos de 50
-        }
-        else
-        {
-            throttle_value = 100; // Reiniciar a 48 después de alcanzar el máximo
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000)); //
-    }
-}
+//         // Incrementar el valor de throttle hasta un máximo de 2047
+//         if (throttle_value < 200)
+//         {
+//             throttle_value += 10; // Incrementar en pasos de 50
+//         }
+//         else
+//         {
+//             throttle_value = 100; // Reiniciar a 48 después de alcanzar el máximo
+//         }
+//         vTaskDelay(pdMS_TO_TICKS(1000)); //
+//     }
+// }
 
 void app_main()
 {
@@ -224,7 +309,7 @@ void app_main()
     init_wifi();
     init_escs();
 
-    xTaskCreate(esc_task, "esc_task", 4096, NULL, 5, NULL);
+    //xTaskCreate(esc_task, "esc_task", 4096, NULL, 5, NULL);
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
     // mpu6050_delete(mpu6050);
