@@ -17,14 +17,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         break;
     default:
+        ESP_LOGI(TAG, "Other MQTT event id: %d", event->event_id);
         break;
     }
 }
 
 void init_mqtt(void)
 {
+    const char *mqtt_host = "192.168.0.116";
+
+    // Agregar un retraso antes de iniciar MQTT
+    vTaskDelay(pdMS_TO_TICKS(5000)); // 5 segundos de retraso
+
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = "mqtt://172.29.106.73:1883",  // Updated to the new format
+        .broker.address.uri = "mqtt://192.168.0.116:1883",  // Actualiza con la IP de tu máquina Windows
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);
@@ -36,6 +42,6 @@ void init_mqtt(void)
 
 void send_message(const char* message)
 {
-    esp_mqtt_client_publish(client, "drone/lights", message, 0, 1, 0);
-    ESP_LOGI(TAG, "Message sent: %s", message);
+    int msg_id = esp_mqtt_client_publish(client, "drone/angles", message, 0, 1, 0);
+    ESP_LOGI(TAG, "Message sent with ID: %d, message: %s", msg_id, message);
 }

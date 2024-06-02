@@ -13,6 +13,12 @@
 #include "esp_netif.h"
 #include "mqtt_module.h"
 
+#include "lwip/inet.h"
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <errno.h>
+
+
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_NUM I2C_NUM_0
@@ -79,6 +85,13 @@ void mpu6050_task(void *pvParameters)
         euler_angles_t angles = get_euler_angles(acce, gyro);
         ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f", angles.pitch, angles.roll, angles.yaw);
 
+        // Crear mensaje JSON con los valores de pitch, roll y yaw
+        char message[100];
+        snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f}", angles.pitch, angles.roll, angles.yaw);
+        
+        // Enviar mensaje a través de MQTT
+        send_message(message);
+
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
@@ -110,6 +123,39 @@ static void i2c_sensor_mpu6050_init(void)
     mpu6050_wake_up(mpu6050);
 }
 
+void test_socket_connection(void *pvParameters)
+{
+    const char *host = "192.168.0.116";
+    const int port = 1883;
+
+    struct sockaddr_in dest_addr;
+    dest_addr.sin_addr.s_addr = inet_addr(host);
+    dest_addr.sin_family = AF_INET;
+    dest_addr.sin_port = htons(port);
+
+    int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (sock < 0) {
+        ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+        vTaskDelete(NULL);
+        return;
+    }
+    ESP_LOGI(TAG, "Socket created, connecting to %s:%d", host, port);
+
+    int err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_in));
+    if (err != 0) {
+        ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
+        close(sock);
+        vTaskDelete(NULL);
+        return;
+    }
+    ESP_LOGI(TAG, "Successfully connected");
+
+    // Close the socket and clean up
+    close(sock);
+    ESP_LOGI(TAG, "Socket closed");
+    vTaskDelete(NULL);
+}
+
 void app_main()
 {
     esp_err_t ret;
@@ -129,6 +175,7 @@ void app_main()
     i2c_sensor_mpu6050_init();
     ret = mpu6050_get_deviceid(mpu6050, &mpu6050_deviceid);
     ESP_LOGI(TAG, "mpuinit  %i", ret);
+    xTaskCreate(&test_socket_connection, "test_socket_connection", 4096, NULL, 5, NULL);
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
     // mpu6050_delete(mpu6050);
