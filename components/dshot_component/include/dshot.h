@@ -24,6 +24,4 @@ typedef struct {
 
 esp_err_t dshot_init(const dshot_config_t *config);
 void dshot_set_throttle(gpio_num_t gpio_num, uint16_t throttle, bool telemetry);
-void dshot_set_throttle2(gpio_num_t gpio_num, uint16_t throttle, bool telemetry);
-
 #endif // DSHOT_H

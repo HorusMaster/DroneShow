@@ -18,7 +18,6 @@
 #include <errno.h>
 #include "dshot.h"
 
-
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_SDA_IO 21
 #define I2C_MASTER_NUM I2C_NUM_0
@@ -69,20 +68,13 @@ static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_v
 }
 
 void mpu6050_task(void *pvParameters)
-{   
+{
     char message[100];
     mpu6050_acce_value_t acce;
     mpu6050_gyro_value_t gyro;
     mpu6050_temp_value_t temp;
-    // Incrementar el valor de throttle gradualmente
-    static uint16_t throttle_value = 48; // Iniciar con el valor mínimo para encender el motor
     // Iniciar los ESCs enviando un throttle de cero por un tiempo
-    ESP_LOGI(TAG, "Start ESC by sending zero throttle for a while...");
-    dshot_set_throttle2(ESC_GPIO_PIN_1, 0, false);
-    dshot_set_throttle2(ESC_GPIO_PIN_2, 0, false);
-    dshot_set_throttle2(ESC_GPIO_PIN_3, 0, false);
-    dshot_set_throttle2(ESC_GPIO_PIN_4, 0, false);
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Espera 5 segundos
+
     while (1)
     {
         mpu6050_get_acce(mpu6050, &acce);
@@ -96,26 +88,13 @@ void mpu6050_task(void *pvParameters)
         ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f", angles.pitch, angles.roll, angles.yaw);
 
         // Crear mensaje JSON con los valores de pitch, roll y yaw
-        
+
         snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f}", angles.pitch, angles.roll, angles.yaw);
         // Aquí podrías agregar la lógica para ajustar el throttle según los ángulos calculados.
         // Por ejemplo, puedes mapear los ángulos a valores de throttle y enviar esos valores a los ESCs.
-        dshot_set_throttle(ESC_GPIO_PIN_1, throttle_value, false);
-        dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);
-        dshot_set_throttle(ESC_GPIO_PIN_3, throttle_value, false);
-        dshot_set_throttle(ESC_GPIO_PIN_4, throttle_value, false);
 
-        ESP_LOGI(TAG, "Throttle value: %d", throttle_value);
-
-        // Incrementar el valor de throttle hasta un máximo de 2047
-        if (throttle_value < 2047) {
-            throttle_value += 50; // Incrementar en pasos de 50
-        } else {
-            throttle_value = 48; // Reiniciar a 48 después de alcanzar el máximo
-        }
-        
         // Enviar mensaje a través de MQTT
-        //send_message(message);
+        // send_message(message);
 
         vTaskDelay(pdMS_TO_TICKS(500));
     }
@@ -213,32 +192,60 @@ static void init_escs(void)
     };
     dshot_init(&config4);
 
-    ESP_LOGI(TAG, "ESCs initialized");
+    ESP_LOGI(TAG, "ESCs initialized");    
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
+}
+
+void esc_task(void *pvParameters)
+{
+    // Incrementar el valor de throttle gradualmente
+    // for (uint16_t thro = 100; thro < 500; thro += 10) {
+    //     dshot_set_throttle(ESC_GPIO_PIN_2, thro, false);        
+    //     vTaskDelay(pdMS_TO_TICKS(1000));
+    // }
+    static uint16_t throttle_value = 100; // Iniciar con el valor mínimo para encender el motor 
+    while (1)
+    {
+        dshot_set_throttle(ESC_GPIO_PIN_2, throttle_value, false);        
+
+        ESP_LOGI(TAG, "Throttle value: %d", throttle_value);
+
+        // Incrementar el valor de throttle hasta un máximo de 2047
+        if (throttle_value < 500)
+        {
+            throttle_value += 10; // Incrementar en pasos de 50
+        }
+        else
+        {
+            throttle_value = 100; // Reiniciar a 48 después de alcanzar el máximo
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 
+    }
 }
 
 void app_main()
 {
-    esp_err_t ret;
-    uint8_t mpu6050_deviceid;
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    //init_wifi();
-    //init_mqtt();
-    ESP_LOGI(TAG, "Initializing I2C...");
+    // esp_err_t ret;
+    // ret = nvs_flash_init();
+    // if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    // {
+    //     ESP_ERROR_CHECK(nvs_flash_erase());
+    //     ret = nvs_flash_init();
+    // }
+    // ESP_ERROR_CHECK(ret);
+    // ESP_ERROR_CHECK(esp_netif_init());
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // init_wifi();
+    // init_mqtt();
+    // ESP_LOGI(TAG, "Initializing I2C...");
     i2c_sensor_mpu6050_init();
-    ret = mpu6050_get_deviceid(mpu6050, &mpu6050_deviceid);
-    ESP_LOGI(TAG, "mpuinit  %i", ret);
     init_escs();
+   
+
     // xTaskCreate(&test_socket_connection, "test_socket_connection", 4096, NULL, 5, NULL);
+    xTaskCreate(esc_task, "esc_task", 4096, NULL, 5, NULL);
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
-    xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
+    //xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
     // mpu6050_delete(mpu6050);
 }
 

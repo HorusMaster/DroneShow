@@ -8,6 +8,9 @@ static const char *TAG = "dshot";
 static const uint32_t DSHOT_ESC_RESOLUTION_HZ = 40000000; // 40MHz resolution
 static rmt_channel_handle_t esc_chans[4] = { NULL, NULL, NULL, NULL };
 static rmt_encoder_handle_t dshot_encoders[4] = { NULL, NULL, NULL, NULL };
+static dshot_esc_throttle_t throttle_data[4];
+static rmt_transmit_config_t tx_config[4];
+
 
 static int get_channel_index(gpio_num_t gpio_num) {
     switch (gpio_num) {
@@ -52,6 +55,18 @@ esp_err_t dshot_init(const dshot_config_t *config) {
     ESP_LOGI(TAG, "Enable RMT TX channel for GPIO %d", config->gpio_num);
     ESP_ERROR_CHECK(rmt_enable(esc_chans[index]));
 
+    throttle_data[index] = (dshot_esc_throttle_t) {
+        .throttle = 0,
+        .telemetry_req = false,
+    };
+
+    tx_config[index] = (rmt_transmit_config_t) {
+        .loop_count = -1, // Bucle infinito para mantener el estado inicial
+    };
+
+    // Enviar throttle cero inicial para inicializar los ESCs
+    ESP_ERROR_CHECK(rmt_transmit(esc_chans[index], dshot_encoders[index], &throttle_data[index], sizeof(throttle_data[index]), &tx_config[index]));
+
     return ESP_OK;
 }
 
@@ -61,33 +76,10 @@ void dshot_set_throttle(gpio_num_t gpio_num, uint16_t throttle, bool telemetry) 
         ESP_LOGE(TAG, "Invalid GPIO pin");
         return;
     }
-
-    dshot_esc_throttle_t throttle_data = {
-        .throttle = throttle,
-        .telemetry_req = telemetry,
-    };
-    rmt_transmit_config_t tx_config = {
-        .loop_count = 0,
-    };
-
-    ESP_ERROR_CHECK(rmt_transmit(esc_chans[index], dshot_encoders[index], &throttle_data, sizeof(throttle_data), &tx_config));
-}
-
-
-void dshot_set_throttle2(gpio_num_t gpio_num, uint16_t throttle, bool telemetry) {
-    int index = get_channel_index(gpio_num);
-    if (index == -1) {
-        ESP_LOGE(TAG, "Invalid GPIO pin");
-        return;
-    }
-
-    dshot_esc_throttle_t throttle_data = {
-        .throttle = 0,
-        .telemetry_req = telemetry,
-    };
-    rmt_transmit_config_t tx_config = {
-        .loop_count = -1,
-    };
-
-    ESP_ERROR_CHECK(rmt_transmit(esc_chans[index], dshot_encoders[index], &throttle_data, sizeof(throttle_data), &tx_config));
+   
+    throttle_data[index].throttle = throttle;
+    throttle_data[index].telemetry_req = telemetry;  
+    ESP_ERROR_CHECK(rmt_transmit(esc_chans[index], dshot_encoders[index], &throttle_data[index], sizeof(throttle_data[index]), &tx_config[index]));
+    ESP_ERROR_CHECK(rmt_disable(esc_chans[index]));
+    ESP_ERROR_CHECK(rmt_enable(esc_chans[index]));
 }
