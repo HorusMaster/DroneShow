@@ -140,12 +140,17 @@ void mpu6050_task(void *pvParameters)
     // Iniciar los ESCs enviando un throttle de cero por un tiempo
 
     while (1)
-    {       
-        float temp_env = 0, pres = 0, hum = 0;
+    {          
+        ESP_ERROR_CHECK(bmx280_setMode(bmx280, BMX280_MODE_FORCE));
         do {
             vTaskDelay(pdMS_TO_TICKS(1));
         } while (bmx280_isSampling(bmx280));
-        ESP_ERROR_CHECK(bmx280_readoutFloat(bmx280, &temp_env, &pres, &hum));        
+        float temp_env = 0, pres = 0, hum = 0;
+        esp_err_t ret = bmx280_readoutFloat(bmx280, &temp_env, &pres, &hum);  
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to read data from BMP280: %s", esp_err_to_name(ret));
+            continue; // Si falla, continuar al siguiente ciclo
+        }
         float pressure_hPa = pres / 100.0; // Convertir de Pa a hPa
         float altitude = calculate_altitude(pressure_hPa);
         mpu6050_get_acce(mpu6050, &acce);       
