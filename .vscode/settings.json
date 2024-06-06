@@ -9,6 +9,12 @@
         "dshot.h": "c",
         "rmt_tx.h": "c",
         "set": "c",
-        "inet.h": "c"
+        "inet.h": "c",
+        "i2c_config.h": "c",
+        "hmc5883l.h": "c",
+        "i2c.h": "c",
+        "queue.h": "c",
+        "i2c_master.h": "c",
+        "gpio.h": "c"
     }
 }
