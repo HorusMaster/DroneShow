@@ -4,7 +4,6 @@
 #include "driver/i2c.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "mpu6050.h"
 #include <math.h>
 #include "wifi_module.h"
 #include "nvs_flash.h"
@@ -15,6 +14,7 @@
 #include <errno.h>
 #include "dshot.h"
 #include "bmx280.h"
+#include "icm20948.h"
 
 #define I2C_MASTER_SCL_IO 22
 #define I2C_MASTER_SDA_IO 21
@@ -26,8 +26,8 @@
 
 #define BLINK_GPIO GPIO_NUM_2
 
-static mpu6050_handle_t mpu6050 = NULL;
-static bmx280_t *bmx280 = NULL;
+static icm20948_handle_t icm20948 = NULL;
+//static bmx280_t *bmx280 = NULL;
 static const char *TAG = "main";
 
 void blink_task(void *pvParameter)
@@ -105,25 +105,25 @@ float pid_compute(pid_controller_t *pid, float current_value) {
     return output;
 }
 
-static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_value_t gyro, float altitude)
-{
-    euler_angles_t angles;
+// static euler_angles_t get_euler_angles(mpu6050_acce_value_t acce, mpu6050_gyro_value_t gyro, float altitude)
+// {
+//     euler_angles_t angles;
 
-    // Calculate roll and pitch from accelerometer data
-    angles.roll = atan2(acce.acce_y, acce.acce_z) * 180 / M_PI;
-    angles.pitch = atan2(-acce.acce_x, sqrt(acce.acce_y * acce.acce_y + acce.acce_z * acce.acce_z)) * 180 / M_PI;
+//     // Calculate roll and pitch from accelerometer data
+//     angles.roll = atan2(acce.acce_y, acce.acce_z) * 180 / M_PI;
+//     angles.pitch = atan2(-acce.acce_x, sqrt(acce.acce_y * acce.acce_y + acce.acce_z * acce.acce_z)) * 180 / M_PI;
 
-    // Yaw calculation requires integrating the gyroscope data
-    static float previous_yaw = 0;
-    float dt = 0.5; // Assuming a fixed delay of 500ms between readings
+//     // Yaw calculation requires integrating the gyroscope data
+//     static float previous_yaw = 0;
+//     float dt = 0.5; // Assuming a fixed delay of 500ms between readings
 
-    angles.yaw = previous_yaw + gyro.gyro_z * dt;
-    previous_yaw = angles.yaw;
+//     angles.yaw = previous_yaw + gyro.gyro_z * dt;
+//     previous_yaw = angles.yaw;
 
-    angles.altitude = altitude;
+//     angles.altitude = altitude;
 
-    return angles;
-}
+//     return angles;
+// }
 
 float calculate_altitude(float pressure)
 {
@@ -131,71 +131,135 @@ float calculate_altitude(float pressure)
     return 44330.0 * (1.0 - pow(pressure / sea_level_pressure, 0.1903));
 }
 
-void mpu6050_task(void *pvParameters)
+static esp_err_t icm20948_configure(icm20948_acce_fs_t acce_fs, icm20948_gyro_fs_t gyro_fs)
 {
-    char message[100];
-    mpu6050_acce_value_t acce;
-    mpu6050_gyro_value_t gyro;
-    mpu6050_temp_value_t temp;    
-    // Iniciar los ESCs enviando un throttle de cero por un tiempo
+	esp_err_t ret;
+
+	/*
+	 * One might need to change ICM20948_I2C_ADDRESS to ICM20948_I2C_ADDRESS_1
+	 * if address pin pulled low (to GND)
+	 */
+	icm20948 = icm20948_create(I2C_MASTER_NUM, ICM20948_I2C_ADDRESS_1);
+	if (icm20948 == NULL) {
+		ESP_LOGE(TAG, "ICM20948 create returned NULL!");
+		return ESP_FAIL;
+	}
+	ESP_LOGI(TAG, "ICM20948 creation successfull!");
+
+	ret = icm20948_reset(icm20948);
+	if (ret != ESP_OK)       
+		return ret;
+
+	vTaskDelay(10 / portTICK_PERIOD_MS);
+
+	ret = icm20948_wake_up(icm20948);
+	if (ret != ESP_OK)
+		return ret;
+
+	ret = icm20948_set_bank(icm20948, 0);
+	if (ret != ESP_OK)
+		return ret;
+
+	uint8_t device_id;
+	ret = icm20948_get_deviceid(icm20948, &device_id);
+	if (ret != ESP_OK)
+		return ret;
+	ESP_LOGI(TAG, "0x%02X", device_id);
+	if (device_id != ICM20948_WHO_AM_I_VAL)
+		return ESP_FAIL;
+
+	ret = icm20948_set_gyro_fs(icm20948, gyro_fs);
+	if (ret != ESP_OK)
+		return ESP_FAIL;
+
+	ret = icm20948_set_acce_fs(icm20948, acce_fs);
+	if (ret != ESP_OK)
+		return ESP_FAIL;
+
+	return ret;
+}
+
+void icm20948_task(void *pvParameters)
+{
+    //char message[100];    //FOR MQTT
+    esp_err_t ret = icm20948_configure(ACCE_FS_2G, GYRO_FS_1000DPS);
+    if (ret != ESP_OK) {
+		ESP_LOGE(TAG, "ICM configuration failure");
+		vTaskDelete(NULL);
+	}
+	ESP_LOGI(TAG, "ICM20948 configuration successfull!");
 
     while (1)
-    {          
-        ESP_ERROR_CHECK(bmx280_setMode(bmx280, BMX280_MODE_FORCE));
-        do {
-            vTaskDelay(pdMS_TO_TICKS(1));
-        } while (bmx280_isSampling(bmx280));
-        float temp_env = 0, pres = 0, hum = 0;
-        esp_err_t ret = bmx280_readoutFloat(bmx280, &temp_env, &pres, &hum);  
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to read data from BMP280: %s", esp_err_to_name(ret));
-            continue; // Si falla, continuar al siguiente ciclo
-        }
-        float pressure_hPa = pres / 100.0; // Convertir de Pa a hPa
-        // TODO filter kalman altitud and others
-        float altitude = calculate_altitude(pressure_hPa);
-        mpu6050_get_acce(mpu6050, &acce);       
-        mpu6050_get_gyro(mpu6050, &gyro);        
-        mpu6050_get_temp(mpu6050, &temp);
-        euler_angles_t angles = get_euler_angles(acce, gyro, altitude);
-        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", angles.pitch, angles.roll, angles.yaw, angles.altitude, temp_env);
-
-        // Crear mensaje JSON con los valores de pitch, roll y yaw
-        snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", angles.pitch, angles.roll, angles.yaw, angles.altitude);
-        // Aquí podrías agregar la lógica para ajustar el throttle según los ángulos calculados.
-        // Por ejemplo, puedes mapear los ángulos a valores de throttle y enviar esos valores a los ESCs.
-        float pid_output_altitude = pid_compute(&pid_altitude, altitude);
-        float pid_output_pitch = pid_compute(&pid_pitch, angles.pitch);
-        float pid_output_roll = pid_compute(&pid_roll, angles.roll);
-        float pid_output_yaw = pid_compute(&pid_yaw, angles.yaw);
-
-        // Ajustar el throttle y los motores según los outputs de los PIDs
-        uint16_t throttle_base = (uint16_t)pid_output_altitude;
-        if (throttle_base > 2047) {
-            throttle_base = 2047;
-        }
+    {           
         
-        uint16_t motor1_throttle = throttle_base + pid_output_pitch - pid_output_roll + pid_output_yaw;
-        uint16_t motor2_throttle = throttle_base + pid_output_pitch + pid_output_roll - pid_output_yaw;
-        uint16_t motor3_throttle = throttle_base - pid_output_pitch + pid_output_roll + pid_output_yaw;
-        uint16_t motor4_throttle = throttle_base - pid_output_pitch - pid_output_roll - pid_output_yaw;
+	icm20948_acce_value_t acce;
+	icm20948_gyro_value_t gyro;
+	for (int i = 0; i < 100; ++i) {
+		ret = icm20948_get_acce(icm20948, &acce);
+		if (ret == ESP_OK)
+			ESP_LOGI(TAG, "ax: %lf ay: %lf az: %lf", acce.acce_x, acce.acce_y, acce.acce_z);
+		ret = icm20948_get_gyro(icm20948, &gyro);
+		if (ret == ESP_OK)
+			ESP_LOGI(TAG, "gx: %lf gy: %lf gz: %lf", gyro.gyro_x, gyro.gyro_y, gyro.gyro_z);
+		vTaskDelay(100 / portTICK_PERIOD_MS);
+	}
 
-        // Limitar los valores de throttle a 2047
-        if (motor1_throttle > 2047) motor1_throttle = 2047;
-        if (motor2_throttle > 2047) motor2_throttle = 2047;
-        if (motor3_throttle > 2047) motor3_throttle = 2047;
-        if (motor4_throttle > 2047) motor4_throttle = 2047;
+        // ESP_ERROR_CHECK(bmx280_setMode(bmx280, BMX280_MODE_FORCE));
+        // do {
+        //     vTaskDelay(pdMS_TO_TICKS(1));
+        // } while (bmx280_isSampling(bmx280));
+        // float temp_env = 0, pres = 0, hum = 0;
+        // esp_err_t ret = bmx280_readoutFloat(bmx280, &temp_env, &pres, &hum);  
+        // if (ret != ESP_OK) {
+        //     ESP_LOGE(TAG, "Failed to read data from BMP280: %s", esp_err_to_name(ret));
+        //     continue; // Si falla, continuar al siguiente ciclo
+        // }
+        // float pressure_hPa = pres / 100.0; // Convertir de Pa a hPa
+        // // // TODO filter kalman altitud and others
+        // float altitude = calculate_altitude(pressure_hPa);
+        // ESP_LOGI(TAG, "Altitude: %.2f", altitude);
+        // mpu6050_get_acce(mpu6050, &acce);       
+        // mpu6050_get_gyro(mpu6050, &gyro);        
+        // mpu6050_get_temp(mpu6050, &temp);
+        // euler_angles_t angles = get_euler_angles(acce, gyro, altitude);
+        // ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", angles.pitch, angles.roll, angles.yaw, angles.altitude, temp_env);
 
-        // Imprimir valores de throttle de cada motor
-        ESP_LOGI(TAG, "Throttle Motors: M1: %d, M2: %d, M3: %d, M4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
+        // // Crear mensaje JSON con los valores de pitch, roll y yaw
+        // snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", angles.pitch, angles.roll, angles.yaw, angles.altitude);
+        // // Aquí podrías agregar la lógica para ajustar el throttle según los ángulos calculados.
+        // // Por ejemplo, puedes mapear los ángulos a valores de throttle y enviar esos valores a los ESCs.
+        // float pid_output_altitude = pid_compute(&pid_altitude, altitude);
+        // float pid_output_pitch = pid_compute(&pid_pitch, angles.pitch);
+        // float pid_output_roll = pid_compute(&pid_roll, angles.roll);
+        // float pid_output_yaw = pid_compute(&pid_yaw, angles.yaw);
+
+        // // Ajustar el throttle y los motores según los outputs de los PIDs
+        // uint16_t throttle_base = (uint16_t)pid_output_altitude;
+        // if (throttle_base > 2047) {
+        //     throttle_base = 2047;
+        // }
         
-        dshot_set_throttle(ESC_GPIO_PIN_1, motor1_throttle, false);
-        dshot_set_throttle(ESC_GPIO_PIN_2, motor2_throttle, false);
-        dshot_set_throttle(ESC_GPIO_PIN_3, motor3_throttle, false);
-        dshot_set_throttle(ESC_GPIO_PIN_4, motor4_throttle, false);
+        // uint16_t motor1_throttle = throttle_base + pid_output_pitch - pid_output_roll + pid_output_yaw;
+        // uint16_t motor2_throttle = throttle_base + pid_output_pitch + pid_output_roll - pid_output_yaw;
+        // uint16_t motor3_throttle = throttle_base - pid_output_pitch + pid_output_roll + pid_output_yaw;
+        // uint16_t motor4_throttle = throttle_base - pid_output_pitch - pid_output_roll - pid_output_yaw;
 
-        // Enviar mensaje a través de MQTT
-        // send_message(message);
+        // // Limitar los valores de throttle a 2047
+        // if (motor1_throttle > 2047) motor1_throttle = 2047;
+        // if (motor2_throttle > 2047) motor2_throttle = 2047;
+        // if (motor3_throttle > 2047) motor3_throttle = 2047;
+        // if (motor4_throttle > 2047) motor4_throttle = 2047;
+
+        // // Imprimir valores de throttle de cada motor
+        // ESP_LOGI(TAG, "Throttle Motors: M1: %d, M2: %d, M3: %d, M4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
+        
+        // dshot_set_throttle(ESC_GPIO_PIN_1, motor1_throttle, false);
+        // dshot_set_throttle(ESC_GPIO_PIN_2, motor2_throttle, false);
+        // dshot_set_throttle(ESC_GPIO_PIN_3, motor3_throttle, false);
+        // dshot_set_throttle(ESC_GPIO_PIN_4, motor4_throttle, false);
+
+        // // Enviar mensaje a través de MQTT
+        // // send_message(message);
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -214,65 +278,65 @@ static void i2c_bus_init(void)
     ESP_ERROR_CHECK(i2c_driver_install(I2C_MASTER_NUM, I2C_MODE_MASTER, 0, 0, 0));
 }
 
-/**
- * @brief i2c master initialization
- */
-static void i2c_sensor_mpu6050_init(void)
-{
-    mpu6050 = mpu6050_create(I2C_MASTER_NUM, MPU6050_I2C_ADDRESS);
-    mpu6050_config(mpu6050, ACCE_FS_4G, GYRO_FS_500DPS);
-    mpu6050_wake_up(mpu6050);
-}
+// /**
+//  * @brief i2c master initialization
+//  */
+// static void i2c_sensor_mpu6050_init(void)
+// {
+//     mpu6050 = mpu6050_create(I2C_MASTER_NUM, MPU6050_I2C_ADDRESS);
+//     mpu6050_config(mpu6050, ACCE_FS_4G, GYRO_FS_500DPS);
+//     mpu6050_wake_up(mpu6050);
+// }
 
-static void i2c_sensor_bmp280_init(void)
-{   
-    bmx280_config_t bmx_cfg = BMX280_DEFAULT_CONFIG;
-    bmx280 = bmx280_create(I2C_NUM_0);
-    if (!bmx280) { 
-        ESP_LOGE("test", "Could not create bmx280 driver.");
-        return;
-    }
+// static void i2c_sensor_bmp280_init(void)
+// {   
+//     bmx280_config_t bmx_cfg = BMX280_DEFAULT_CONFIG;
+//     bmx280 = bmx280_create(I2C_NUM_0);
+//     if (!bmx280) { 
+//         ESP_LOGE("test", "Could not create bmx280 driver.");
+//         return;
+//     }
     
-    ESP_ERROR_CHECK(bmx280_init(bmx280));    
-    ESP_ERROR_CHECK(bmx280_configure(bmx280, &bmx_cfg));
-    ESP_ERROR_CHECK(bmx280_setMode(bmx280, BMX280_MODE_FORCE));
+//     ESP_ERROR_CHECK(bmx280_init(bmx280));    
+//     ESP_ERROR_CHECK(bmx280_configure(bmx280, &bmx_cfg));
+//     ESP_ERROR_CHECK(bmx280_setMode(bmx280, BMX280_MODE_FORCE));
     
-}
+// }
 
 
-static void init_escs(void)
-{
-    dshot_config_t config1 = {
-        .gpio_num = ESC_GPIO_PIN_1,
-        .type = DSHOT300,
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-    };
-    dshot_init(&config1);
+// static void init_escs(void)
+// {
+//     dshot_config_t config1 = {
+//         .gpio_num = ESC_GPIO_PIN_1,
+//         .type = DSHOT300,
+//         .clk_src = RMT_CLK_SRC_DEFAULT,
+//     };
+//     dshot_init(&config1);
 
-    dshot_config_t config2 = {
-        .gpio_num = ESC_GPIO_PIN_2,
-        .type = DSHOT300,
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-    };
-    dshot_init(&config2);
+//     dshot_config_t config2 = {
+//         .gpio_num = ESC_GPIO_PIN_2,
+//         .type = DSHOT300,
+//         .clk_src = RMT_CLK_SRC_DEFAULT,
+//     };
+//     dshot_init(&config2);
 
-    dshot_config_t config3 = {
-        .gpio_num = ESC_GPIO_PIN_3,
-        .type = DSHOT300,
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-    };
-    dshot_init(&config3);
+//     dshot_config_t config3 = {
+//         .gpio_num = ESC_GPIO_PIN_3,
+//         .type = DSHOT300,
+//         .clk_src = RMT_CLK_SRC_DEFAULT,
+//     };
+//     dshot_init(&config3);
 
-    dshot_config_t config4 = {
-        .gpio_num = ESC_GPIO_PIN_4,
-        .type = DSHOT300,
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-    };
-    dshot_init(&config4);
+//     dshot_config_t config4 = {
+//         .gpio_num = ESC_GPIO_PIN_4,
+//         .type = DSHOT300,
+//         .clk_src = RMT_CLK_SRC_DEFAULT,
+//     };
+//     dshot_init(&config4);
 
-    ESP_LOGI(TAG, "ESCs initialized");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
-}
+//     ESP_LOGI(TAG, "ESCs initialized");
+//     vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
+// }
 
 // void esc_task(void *pvParameters)
 // {
@@ -310,15 +374,15 @@ void app_main()
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     // init_mqtt();
-    i2c_bus_init();
-    i2c_sensor_mpu6050_init();
-    i2c_sensor_bmp280_init();
-    init_wifi();
-    init_escs();
+    i2c_bus_init();    
+    //i2c_sensor_mpu6050_init();
+    //i2c_sensor_bmp280_init();
+    //init_wifi();
+    //init_escs();
 
     //xTaskCreate(esc_task, "esc_task", 4096, NULL, 5, NULL);
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
-    xTaskCreate(mpu6050_task, "mpu6050_task", 4096, NULL, 5, NULL);
+    xTaskCreate(icm20948_task, "mpu6050_task", 4096, NULL, 5, NULL);
     // mpu6050_delete(mpu6050);
 }
 
