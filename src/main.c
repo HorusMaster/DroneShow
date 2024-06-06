@@ -46,123 +46,153 @@ void blink_task(void *pvParameter)
     }
 }
 
-typedef struct
+static void init_escs(void)
 {
-    float pitch;
-    float roll;
-    float yaw;
-    float altitude;
-} euler_angles_t;
+    dshot_config_t config1 = {
+        .gpio_num = ESC_GPIO_PIN_1,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config1);
+
+    dshot_config_t config2 = {
+        .gpio_num = ESC_GPIO_PIN_2,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config2);
+
+    dshot_config_t config3 = {
+        .gpio_num = ESC_GPIO_PIN_3,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config3);
+
+    dshot_config_t config4 = {
+        .gpio_num = ESC_GPIO_PIN_4,
+        .type = DSHOT300,
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+    };
+    dshot_init(&config4);
+
+    ESP_LOGI(TAG, "ESCs initialized");
+    vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
+}
 
 typedef struct
 {
-    float kp;
-    float ki;
-    float kd;
-    float setpoint;
-    float integral;
+    float kP;
+    float kI;
+    float kD;
     float previous_error;
-} pid_controller_t;
+    float integral;
+} PIDController;
 
-pid_controller_t pid_altitude = {
-    .kp = 1.0, // Ajusta estos valores según sea necesario
-    .ki = 0.5,
-    .kd = 0.1,
-    .setpoint = 1.0, // Altitud deseada en metros
-    .integral = 0,
-    .previous_error = 0};
-
-pid_controller_t pid_pitch = {
-    .kp = 1.0,
-    .ki = 0.5,
-    .kd = 0.1,
-    .setpoint = 0.0, // Pitch deseado en grados
-    .integral = 0,
-    .previous_error = 0};
-
-pid_controller_t pid_roll = {
-    .kp = 1.0,
-    .ki = 0.5,
-    .kd = 0.1,
-    .setpoint = 0.0, // Roll deseado en grados
-    .integral = 0,
-    .previous_error = 0};
-
-pid_controller_t pid_yaw = {
-    .kp = 1.0,
-    .ki = 0.5,
-    .kd = 0.1,
-    .setpoint = 0.0, // Yaw deseado en grados
-    .integral = 0,
-    .previous_error = 0};
-
-float pid_compute(pid_controller_t *pid, float current_value)
+void pid_init(PIDController *pid, float kP, float kI, float kD)
 {
-    float error = pid->setpoint - current_value;
+    pid->kP = kP;
+    pid->kI = kI;
+    pid->kD = kD;
+    pid->previous_error = 0;
+    pid->integral = 0;
+}
+
+float pid_compute(PIDController *pid, float setpoint, float measured)
+{
+    float error = setpoint - measured;
     pid->integral += error;
     float derivative = error - pid->previous_error;
-    float output = pid->kp * error + pid->ki * pid->integral + pid->kd * derivative;
     pid->previous_error = error;
-    return output;
+    return (pid->kP * error) + (pid->kI * pid->integral) + (pid->kD * derivative);
 }
 
-float calculate_altitude(float pressure)
+void imu_task(void *pvParameters)
 {
-    const float sea_level_pressure = 1013.25; // Presión a nivel del mar en hPa
-    return 44330.0 * (1.0 - pow(pressure / sea_level_pressure, 0.1903));
+    IMU_EN_SENSOR_TYPE enMotionSensorType, enPressureType;
+    IMU_ST_ANGLES_DATA stAngles;
+    IMU_ST_SENSOR_DATA stGyroRawData;
+    IMU_ST_SENSOR_DATA stAccelRawData;
+    IMU_ST_SENSOR_DATA stMagnRawData;
+    int32_t s32PressureVal = 0, s32TemperatureVal = 0, s32AltitudeVal = 0;
+    // char message[100];    //FOR MQTT
+    imuInit(&enMotionSensorType, &enPressureType);
+
+    // PID--------------------------------------------
+    // Variables para el control de los motores
+    int motor1_throttle = 0;
+    int motor2_throttle = 0;
+    int motor3_throttle = 0;
+    int motor4_throttle = 0;
+    int base_throttle = 48;  // Ejemplo de valor base de throttle
+    int max_throttle = 1000; // Ejemplo de valor máximo de throttle
+
+    // Inicializar controladores PID
+    PIDController pid_pitch, pid_roll, pid_yaw, pid_altitude;
+    pid_init(&pid_pitch, 1.0, 0.0, 0.0);
+    pid_init(&pid_roll, 1.0, 0.0, 0.0);
+    pid_init(&pid_yaw, 1.0, 0.0, 0.0);
+    pid_init(&pid_altitude, 1.0, 0.0, 0.0);
+
+    float altitude_setpoint = 1.0; // Setpoint de altitud en metros
+
+    while (1)
+    {
+        imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
+        pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
+        float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
+        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw, current_altitude, (float)s32TemperatureVal / 100);
+
+        // Control de los motores basado en los ángulos
+        float pid_output_pitch = pid_compute(&pid_pitch, 0.0, stAngles.fPitch);
+        float pid_output_roll = pid_compute(&pid_roll, 0.0, stAngles.fRoll);
+        float pid_output_yaw = pid_compute(&pid_yaw, 0.0, stAngles.fYaw);
+        float pid_output_altitude = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
+
+        // Cálculo del throttle para cada motor usando las salidas PID
+        motor1_throttle = base_throttle - pid_output_pitch + pid_output_roll + pid_output_yaw + pid_output_altitude;
+        motor2_throttle = base_throttle + pid_output_pitch + pid_output_roll - pid_output_yaw + pid_output_altitude;
+        motor3_throttle = base_throttle + pid_output_pitch - pid_output_roll + pid_output_yaw + pid_output_altitude;
+        motor4_throttle = base_throttle - pid_output_pitch - pid_output_roll - pid_output_yaw + pid_output_altitude;
+
+        // Limitar los valores de throttle entre 0 y el máximo permitido
+        motor1_throttle = fmax(0, fmin(max_throttle, motor1_throttle));
+        motor2_throttle = fmax(0, fmin(max_throttle, motor2_throttle));
+        motor3_throttle = fmax(0, fmin(max_throttle, motor3_throttle));
+        motor4_throttle = fmax(0, fmin(max_throttle, motor4_throttle));
+
+        ESP_LOGI(TAG, "Motor Throttles: Motor1: %d, Motor2: %d, Motor3: %d, Motor4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
+
+        // Enviar el throttle a los ESCs
+        dshot_set_throttle(ESC_GPIO_PIN_1, motor1_throttle, false);
+        dshot_set_throttle(ESC_GPIO_PIN_2, motor2_throttle, false);
+        dshot_set_throttle(ESC_GPIO_PIN_3, motor3_throttle, false);
+        dshot_set_throttle(ESC_GPIO_PIN_4, motor4_throttle, false);
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 
-// static euler_angles_t get_euler_angles(icm20948_acce_value_t acce, icm20948_gyro_value_t gyro)
-// {
-//     euler_angles_t angles;
-
-//     // Calculate roll and pitch from accelerometer data
-//     angles.roll = atan2(acce.acce_y, acce.acce_z) * 180 / M_PI;
-//     angles.pitch = atan2(-acce.acce_x, sqrt(acce.acce_y * acce.acce_y + acce.acce_z * acce.acce_z)) * 180 / M_PI;
-
-//     // Yaw calculation requires integrating the gyroscope data
-//     static float previous_yaw = 0;
-//     float dt = 0.5; // Assuming a fixed delay of 500ms between readings
-
-//     angles.yaw = previous_yaw + gyro.gyro_z * dt;
-//     previous_yaw = angles.yaw;
-
-//     return angles;
-// }
-
-// static void init_escs(void)
-// {
-//     dshot_config_t config1 = {
-//         .gpio_num = ESC_GPIO_PIN_1,
-//         .type = DSHOT300,
-//         .clk_src = RMT_CLK_SRC_DEFAULT,
-//     };
-//     dshot_init(&config1);
-
-//     dshot_config_t config2 = {
-//         .gpio_num = ESC_GPIO_PIN_2,
-//         .type = DSHOT300,
-//         .clk_src = RMT_CLK_SRC_DEFAULT,
-//     };
-//     dshot_init(&config2);
-
-//     dshot_config_t config3 = {
-//         .gpio_num = ESC_GPIO_PIN_3,
-//         .type = DSHOT300,
-//         .clk_src = RMT_CLK_SRC_DEFAULT,
-//     };
-//     dshot_init(&config3);
-
-//     dshot_config_t config4 = {
-//         .gpio_num = ESC_GPIO_PIN_4,
-//         .type = DSHOT300,
-//         .clk_src = RMT_CLK_SRC_DEFAULT,
-//     };
-//     dshot_init(&config4);
-
-//     ESP_LOGI(TAG, "ESCs initialized");
-//     vTaskDelay(pdMS_TO_TICKS(5000)); // Esperar 5 segundos
-// }
+void app_main()
+{
+    esp_err_t ret;
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    i2c_master_init();
+    init_escs();
+    //  init_mqtt();
+    //  init_wifi();
+    // xTaskCreate(i2c_scanner, "i2c_scanner", 1024 * 2, NULL, 10, NULL);
+    xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
+    xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
+}
 
 // static void i2c_scanner(void *arg)
 // {
@@ -183,44 +213,3 @@ float calculate_altitude(float pressure)
 //     }
 //     vTaskDelete(NULL);
 // }
-
-void imu_task(void *pvParameters)
-{
-    IMU_EN_SENSOR_TYPE enMotionSensorType, enPressureType;
-    IMU_ST_ANGLES_DATA stAngles;
-    IMU_ST_SENSOR_DATA stGyroRawData;
-    IMU_ST_SENSOR_DATA stAccelRawData;
-    IMU_ST_SENSOR_DATA stMagnRawData;
-    int32_t s32PressureVal = 0, s32TemperatureVal = 0, s32AltitudeVal = 0;
-    // char message[100];    //FOR MQTT
-    imuInit(&enMotionSensorType, &enPressureType);
-
-    while (1)
-    {
-        imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-        pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
-        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw, (float)s32AltitudeVal / 100, (float)s32TemperatureVal / 100);
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
-
-void app_main()
-{
-    esp_err_t ret;
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    i2c_master_init();
-    //  init_mqtt();
-    //  init_wifi();
-    //  init_escs();
-    // xTaskCreate(i2c_scanner, "i2c_scanner", 1024 * 2, NULL, 10, NULL);
-    xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
-    xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
-}

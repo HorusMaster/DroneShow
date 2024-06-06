@@ -17,6 +17,8 @@
         "i2c_master.h": "c",
         "gpio.h": "c",
         "mqtt_module.h": "c",
-        "waveshare_10dof_d.h": "c"
+        "waveshare_10dof_d.h": "c",
+        "compare": "c",
+        "cstdint": "c"
     }
 }

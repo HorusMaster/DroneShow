@@ -73,12 +73,12 @@ void imuInit(IMU_EN_SENSOR_TYPE *penMotionSensorType, IMU_EN_SENSOR_TYPE *penPre
   bRet = icm20948Check();
   if (bRet == true)
   {
-    *penMotionSensorType = IMU_EN_SENSOR_TYPE_ICM20948;    
+    *penMotionSensorType = IMU_EN_SENSOR_TYPE_ICM20948;
     ESP_LOGI(TAG, "Motion sensor is ICM-20948");
     icm20948init();
   }
   else
-  { 
+  {
     ESP_LOGE(TAG, "Motion sensor is NULL");
     *penMotionSensorType = IMU_EN_SENSOR_TYPE_NULL;
   }
@@ -86,7 +86,7 @@ void imuInit(IMU_EN_SENSOR_TYPE *penMotionSensorType, IMU_EN_SENSOR_TYPE *penPre
   bRet = bmp280Check();
   if (bRet == true)
   {
-    *penPressureType = IMU_EN_SENSOR_TYPE_BMP280;   
+    *penPressureType = IMU_EN_SENSOR_TYPE_BMP280;
     ESP_LOGI(TAG, "Pressure sensor is BMX280");
     bmp280Init();
   }
@@ -583,7 +583,6 @@ float bmp280CompensatePressure(int32_t adc_P)
   {
     return 0; // avoid exception caused by division by zero
   }
-  printf("Pressure ADC : %li\n", adc_P);
   pressure = 1048576.0 - adc_P;
   pressure = (((pressure << 31) - var2) * 3125) / var1;
   var1 = (((int64_t)dig_P9) * (pressure >> 13) * (pressure >> 13)) >> 25;
