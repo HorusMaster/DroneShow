@@ -11,7 +11,8 @@
 #define I2C_MASTER_TIMEOUT_MS 1000
 
 #define MPU6050_ADDR 0x68
-#define BMP280_ADDR 0x76
-
+#define BMP280_ADDR 0x77
 
 #endif // I2C_CONFIG_H
+
+
