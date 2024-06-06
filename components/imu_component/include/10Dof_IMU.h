@@ -260,8 +260,4 @@ void bmp280TandPGet(float *temperature, float *pressure);
 void bmp280CalAvgValue(uint8_t *pIndex, int32_t *pAvgBuffer, int32_t InVal, int32_t *pOutVal);
 void bmp280CalculateAbsoluteAltitude(int32_t *pAltitude, int32_t PressureVal);
 
-#ifdef __cplusplus
-}
-#endif
-
 #endif // __WAVESHARE_10DOF_D_H__

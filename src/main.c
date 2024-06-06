@@ -12,7 +12,7 @@
 #include "mqtt_module.h"
 #include <errno.h>
 #include "dshot.h"
-#include "Waveshare_10DOF_D.h"
+#include "10Dof_IMU.h"
 #include "i2c_config.h"
 
 #define BLINK_GPIO GPIO_NUM_2

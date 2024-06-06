@@ -1,4 +1,4 @@
-#include "Waveshare_10DOF_D.h"
+#include "10Dof_IMU.h"
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "i2c_config.h"
@@ -237,6 +237,7 @@ float invSqrt(float x)
  ******************************************************************************/
 void icm20948init(void)
 {
+  bool bRet = false;
   /* user bank 0 register */
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_PWR_MIGMT_1, REG_VAL_ALL_RGE_RESET);
@@ -259,7 +260,16 @@ void icm20948init(void)
   /* offset */
   icm20948GyroOffset();
 
-  icm20948MagCheck();
+  bRet = icm20948MagCheck();
+
+  if (bRet == true)
+  {
+    ESP_LOGI(TAG, "Magnetometer Found");
+  }
+  else
+  {
+    ESP_LOGE(TAG, "Magnetometer is NULL");
+  }
 
   icm20948WriteSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_WRITE,
                          REG_ADD_MAG_CNTL2, REG_VAL_MAG_MODE_20HZ);
@@ -385,31 +395,48 @@ void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, 
   uint8_t i;
   uint8_t u8Temp;
 
-  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // swtich bank3
+  ESP_LOGI(TAG, "Switching to bank 3");
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
+
+  ESP_LOGI(TAG, "Writing to I2C slave address: 0x%02x", u8I2CAddr);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_ADDR, u8I2CAddr);
+
+  ESP_LOGI(TAG, "Writing to I2C slave register address: 0x%02x", u8RegAddr);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_REG, u8RegAddr);
+
+  ESP_LOGI(TAG, "Setting I2C slave control: 0x%02x", (REG_VAL_BIT_SLV0_EN | u8Len));
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, REG_VAL_BIT_SLV0_EN | u8Len);
 
-  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // swtich bank0
+  ESP_LOGI(TAG, "Switching to bank 0");
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
 
+  ESP_LOGI(TAG, "Enabling I2C master");
   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL);
   u8Temp |= REG_VAL_BIT_I2C_MST_EN;
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
   vTaskDelay(5 / portTICK_PERIOD_MS);
+
+  ESP_LOGI(TAG, "Disabling I2C master");
   u8Temp &= ~REG_VAL_BIT_I2C_MST_EN;
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
 
+  ESP_LOGI(TAG, "Reading %d bytes from I2C slave data registers", u8Len);
   for (i = 0; i < u8Len; i++)
   {
-    *(pu8data + i) = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_EXT_SENS_DATA_00 + i);
+    pu8data[i] = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_EXT_SENS_DATA_00 + i);
+    //ESP_LOGI(TAG, "Read byte %d: 0x%02x", i, pu8data[i]);
   }
-  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // swtich bank3
 
+  ESP_LOGI(TAG, "Switching to bank 3");
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
+
+  ESP_LOGI(TAG, "Disabling I2C slave control");
   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL);
   u8Temp &= ~((REG_VAL_BIT_I2C_MST_EN) & (REG_VAL_BIT_MASK_LEN));
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, u8Temp);
 
-  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // swtich bank0
+  ESP_LOGI(TAG, "Switching to bank 0");
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
 }
 
 void icm20948WriteSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8data)
