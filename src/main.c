@@ -87,6 +87,7 @@ typedef struct
     float kD;
     float previous_error;
     float integral;
+    TickType_t lastTime;
 } PIDController;
 
 void pid_init(PIDController *pid, float kP, float kI, float kD)
@@ -100,10 +101,15 @@ void pid_init(PIDController *pid, float kP, float kI, float kD)
 
 float pid_compute(PIDController *pid, float setpoint, float measured)
 {
+    TickType_t now = xTaskGetTickCount();
+    float dt = (now - pid->lastTime) / portTICK_PERIOD_MS;
+    pid->lastTime = now;
+
     float error = setpoint - measured;
-    pid->integral += error;
-    float derivative = error - pid->previous_error;
+    pid->integral += error * dt;
+    float derivative = (error - pid->previous_error) / dt;
     pid->previous_error = error;
+
     return (pid->kP * error) + (pid->kI * pid->integral) + (pid->kD * derivative);
 }
 
@@ -124,8 +130,9 @@ void imu_task(void *pvParameters)
     int motor2_throttle = 0;
     int motor3_throttle = 0;
     int motor4_throttle = 0;
-    int base_throttle = 48;  // Ejemplo de valor base de throttle
+    int base_throttle = 500; // Ejemplo de valor base de throttle
     int max_throttle = 1000; // Ejemplo de valor máximo de throttle
+    int min_throttle = 0;    // Ejemplo de valor mínimo de throttle
 
     // Inicializar controladores PID
     PIDController pid_pitch, pid_roll, pid_yaw, pid_altitude;
@@ -134,20 +141,23 @@ void imu_task(void *pvParameters)
     pid_init(&pid_yaw, 1.0, 0.0, 0.0);
     pid_init(&pid_altitude, 1.0, 0.0, 0.0);
 
-    float altitude_setpoint = 1.0; // Setpoint de altitud en metros
+    // float altitude_setpoint = 2053.09; // Setpoint de altitud en metros
 
     while (1)
     {
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
         float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
+        float altitude_setpoint = current_altitude + 1.0;       // Setpoint de altitud en metros, un metro por encima de la altitud actual
         ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw, current_altitude, (float)s32TemperatureVal / 100);
-
+        ESP_LOGI(TAG, "Altitude Desired: %.2f", altitude_setpoint);
         // Control de los motores basado en los ángulos
         float pid_output_pitch = pid_compute(&pid_pitch, 0.0, stAngles.fPitch);
         float pid_output_roll = pid_compute(&pid_roll, 0.0, stAngles.fRoll);
         float pid_output_yaw = pid_compute(&pid_yaw, 0.0, stAngles.fYaw);
         float pid_output_altitude = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
+
+        ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", pid_output_pitch, pid_output_roll, pid_output_yaw, pid_output_altitude);
 
         // Cálculo del throttle para cada motor usando las salidas PID
         motor1_throttle = base_throttle - pid_output_pitch + pid_output_roll + pid_output_yaw + pid_output_altitude;
@@ -156,10 +166,10 @@ void imu_task(void *pvParameters)
         motor4_throttle = base_throttle - pid_output_pitch - pid_output_roll - pid_output_yaw + pid_output_altitude;
 
         // Limitar los valores de throttle entre 0 y el máximo permitido
-        motor1_throttle = fmax(0, fmin(max_throttle, motor1_throttle));
-        motor2_throttle = fmax(0, fmin(max_throttle, motor2_throttle));
-        motor3_throttle = fmax(0, fmin(max_throttle, motor3_throttle));
-        motor4_throttle = fmax(0, fmin(max_throttle, motor4_throttle));
+        motor1_throttle = fmax(min_throttle, fmin(max_throttle, motor1_throttle));
+        motor2_throttle = fmax(min_throttle, fmin(max_throttle, motor2_throttle));
+        motor3_throttle = fmax(min_throttle, fmin(max_throttle, motor3_throttle));
+        motor4_throttle = fmax(min_throttle, fmin(max_throttle, motor4_throttle));
 
         ESP_LOGI(TAG, "Motor Throttles: Motor1: %d, Motor2: %d, Motor3: %d, Motor4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
 
