@@ -1,6 +1,5 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
 #include "driver/i2c.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
@@ -17,6 +16,8 @@
 #include "i2c_config.h"
 
 #define BLINK_GPIO GPIO_NUM_2
+#define STACK_SIZE_LARGE 4096
+
 static const char *TAG = "main";
 
 static void i2c_master_init(void)
@@ -90,6 +91,16 @@ typedef struct
     TickType_t lastTime;
 } PIDController;
 
+typedef struct
+{
+    float pitch;
+    float roll;
+    float yaw;
+    float altitude;
+} IMU_Data;
+
+IMU_Data imu_data;
+
 void pid_init(PIDController *pid, float kP, float kI, float kD)
 {
     pid->kP = kP;
@@ -113,6 +124,18 @@ float pid_compute(PIDController *pid, float setpoint, float measured)
     return (pid->kP * error) + (pid->kI * pid->integral) + (pid->kD * derivative);
 }
 
+void mqtt_task(void *pvParameters)
+{
+    char message[100];
+
+    while (1)
+    {
+        snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", imu_data.pitch, imu_data.roll, imu_data.yaw, imu_data.altitude);
+        send_message(message);
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Delay de 1000 ms (1 segundo) para el envío de mensajes MQTT
+    }
+}
+
 void imu_task(void *pvParameters)
 {
     IMU_EN_SENSOR_TYPE enMotionSensorType, enPressureType;
@@ -121,10 +144,8 @@ void imu_task(void *pvParameters)
     IMU_ST_SENSOR_DATA stAccelRawData;
     IMU_ST_SENSOR_DATA stMagnRawData;
     int32_t s32PressureVal = 0, s32TemperatureVal = 0, s32AltitudeVal = 0;
-    // char message[100];    //FOR MQTT
     imuInit(&enMotionSensorType, &enPressureType);
 
-    // PID--------------------------------------------
     // Variables para el control de los motores
     int motor1_throttle = 0;
     int motor2_throttle = 0;
@@ -141,23 +162,27 @@ void imu_task(void *pvParameters)
     pid_init(&pid_yaw, 1.0, 0.0, 0.0);
     pid_init(&pid_altitude, 1.0, 0.0, 0.0);
 
-    // float altitude_setpoint = 2053.09; // Setpoint de altitud en metros
-
     while (1)
     {
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
         float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
-        float altitude_setpoint = current_altitude + 1.0;       // Setpoint de altitud en metros, un metro por encima de la altitud actual
-        ESP_LOGI(TAG, "Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f, Temp: %.2f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw, current_altitude, (float)s32TemperatureVal / 100);
-        ESP_LOGI(TAG, "Altitude Desired: %.2f", altitude_setpoint);
+        float altitude_setpoint = current_altitude + 0.0;       // Setpoint de altitud en metros, un metro por encima de la altitud actual
+
+        // snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw, current_altitude);
+        // send_message(message);
+        imu_data.pitch = -stAngles.fPitch;
+        imu_data.roll = stAngles.fRoll;
+        imu_data.yaw = stAngles.fYaw;
+        imu_data.altitude = current_altitude;
+
         // Control de los motores basado en los ángulos
-        float pid_output_pitch = pid_compute(&pid_pitch, 0.0, stAngles.fPitch);
-        float pid_output_roll = pid_compute(&pid_roll, 0.0, stAngles.fRoll);
-        float pid_output_yaw = pid_compute(&pid_yaw, 0.0, stAngles.fYaw);
+        float pid_output_pitch = pid_compute(&pid_pitch, 0.0, imu_data.pitch);
+        float pid_output_roll = pid_compute(&pid_roll, 0.0, imu_data.roll);
+        float pid_output_yaw = pid_compute(&pid_yaw, 0.0, imu_data.yaw);
         float pid_output_altitude = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
 
-        ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", pid_output_pitch, pid_output_roll, pid_output_yaw, pid_output_altitude);
+        // ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", pid_output_pitch, pid_output_roll, pid_output_yaw, pid_output_altitude);
 
         // Cálculo del throttle para cada motor usando las salidas PID
         motor1_throttle = base_throttle - pid_output_pitch + pid_output_roll + pid_output_yaw + pid_output_altitude;
@@ -171,7 +196,7 @@ void imu_task(void *pvParameters)
         motor3_throttle = fmax(min_throttle, fmin(max_throttle, motor3_throttle));
         motor4_throttle = fmax(min_throttle, fmin(max_throttle, motor4_throttle));
 
-        ESP_LOGI(TAG, "Motor Throttles: Motor1: %d, Motor2: %d, Motor3: %d, Motor4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
+        // ESP_LOGI(TAG, "Motor Throttles: Motor1: %d, Motor2: %d, Motor3: %d, Motor4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
 
         // Enviar el throttle a los ESCs
         dshot_set_throttle(ESC_GPIO_PIN_1, motor1_throttle, false);
@@ -197,12 +222,41 @@ void app_main()
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     i2c_master_init();
     init_escs();
-    //  init_mqtt();
-    //  init_wifi();
+    init_wifi();
+    init_mqtt();
+
     // xTaskCreate(i2c_scanner, "i2c_scanner", 1024 * 2, NULL, 10, NULL);
+    // test_motors();
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
+    xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
 }
+
+// void test_motors()
+// {
+//     int max_throttle = 1000;
+//     int increment = 10;
+
+//     for (int i = 0; i <= max_throttle; i += increment)
+//     {
+//         dshot_set_throttle(ESC_GPIO_PIN_1, i, false);
+//         dshot_set_throttle(ESC_GPIO_PIN_2, i, false);
+//         dshot_set_throttle(ESC_GPIO_PIN_3, i, false);
+//         dshot_set_throttle(ESC_GPIO_PIN_4, i, false);
+//         vTaskDelay(pdMS_TO_TICKS(50)); // Espera 50ms entre cada incremento
+//     }
+
+//     vTaskDelay(pdMS_TO_TICKS(5000)); // Mantén el throttle en 1000 por 5 segundos
+
+//     for (int i = max_throttle; i >= 0; i -= increment)
+//     {
+//         dshot_set_throttle(ESC_GPIO_PIN_1, i, false);
+//         dshot_set_throttle(ESC_GPIO_PIN_2, i, false);
+//         dshot_set_throttle(ESC_GPIO_PIN_3, i, false);
+//         dshot_set_throttle(ESC_GPIO_PIN_4, i, false);
+//         vTaskDelay(pdMS_TO_TICKS(50)); // Espera 50ms entre cada decremento
+//     }
+// }
 
 // static void i2c_scanner(void *arg)
 // {

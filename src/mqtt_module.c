@@ -17,7 +17,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         break;
     default:
-        ESP_LOGI(TAG, "Other MQTT event id: %d", event->event_id);
+        //ESP_LOGI(TAG, "Other MQTT event id: %d", event->event_id);
         break;
     }
 }
@@ -40,6 +40,6 @@ void init_mqtt(void)
 
 void send_message(const char* message)
 {
-    int msg_id = esp_mqtt_client_publish(client, "drone/angles", message, 0, 1, 0);
+    int msg_id = esp_mqtt_client_publish(client, "drone/telemetry", message, 0, 1, 0);
     ESP_LOGI(TAG, "Message sent with ID: %d, message: %s", msg_id, message);
 }
