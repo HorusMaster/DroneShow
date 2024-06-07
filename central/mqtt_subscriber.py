@@ -93,7 +93,7 @@ def on_message(client, userdata, msg):
 def send_command(client):
     while True:
         command = input("Enter command (start/full-stop: s): ").strip().lower()
-        if command in ["start", "s"]:
+        if command in ["start", "s", "restart"]:
             client.publish(COMMAND_TOPIC, command)
         elif command == "q":
             plt.close("all")
