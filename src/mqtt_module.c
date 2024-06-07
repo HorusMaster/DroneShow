@@ -40,19 +40,19 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         break;
     case MQTT_EVENT_DATA:
-        //ESP_LOGI(TAG, "MQTT_EVENT_DATA: %.*s", event->data_len, event->data);
+        // ESP_LOGI(TAG, "MQTT_EVENT_DATA: %.*s", event->data_len, event->data);
         if (strncmp(event->data, "s", event->data_len) == 0 && event->data_len == 1) // Verifica longitud correcta
-        {   
-            ESP_LOGI(TAG, "Starting ESCS");
+        {
+            ESP_LOGI(TAG, "Stopping ESCS");
             set_full_stop(true);
         }
         else if (strncmp(event->data, "start", event->data_len) == 0 && event->data_len == 5) // Verifica longitud correcta
-        {   
-            ESP_LOGI(TAG, "Stopping ESCS");
+        {
+            ESP_LOGI(TAG, "Starting ESCS");
             set_full_stop(false);
         }
         else if (strncmp(event->data, "restart", event->data_len) == 0 && event->data_len == 7) // Verifica longitud correcta
-        {   
+        {
             ESP_LOGI(TAG, "Restarting ESCS");
             set_restart_escs(true);
         }
@@ -77,6 +77,5 @@ void init_mqtt(void)
 
 void send_message(const char *message)
 {
-    int msg_id = esp_mqtt_client_publish(client, "drone/telemetry", message, 0, 1, 0);
-    ESP_LOGI(TAG, "Message sent with ID: %d, message: %s", msg_id, message);
+    esp_mqtt_client_publish(client, "drone/telemetry", message, 0, 1, 0);
 }

@@ -98,9 +98,17 @@ typedef struct
     float roll;
     float yaw;
     float altitude;
-} IMU_Data;
+    float motor1;
+    float motor2;
+    float motor3;
+    float motor4;
+    float pidpitch;
+    float pidroll;
+    float pidyaw;
+    float pidalt;
+} TELEMETRY_Data;
 
-IMU_Data imu_data;
+TELEMETRY_Data tmd; // Telemetry data
 
 void pid_init(PIDController *pid, float kP, float kI, float kD)
 {
@@ -127,10 +135,22 @@ float pid_compute(PIDController *pid, float setpoint, float measured)
 
 void mqtt_task(void *pvParameters)
 {
-    char message[100];
+    char message[512];
     while (1)
     {
-        snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", imu_data.pitch, imu_data.roll, imu_data.yaw, imu_data.altitude);
+        if (isnan(tmd.pidpitch) || isnan(tmd.pidroll) || isnan(tmd.pidyaw) ||
+            isnan(tmd.pidalt))
+        {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Increased delay to allow sufficient processing time
+            continue;
+        }
+        snprintf(message, sizeof(message),
+                 "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f, "
+                 "\"motor1\": %.2f, \"motor2\": %.2f, \"motor3\": %.2f, \"motor4\": %.2f, "
+                 "\"pidpitch\": %.2f, \"pidroll\": %.2f, \"pidyaw\": %.2f, \"pidalt\": %.2f}",
+                 tmd.pitch, tmd.roll, tmd.yaw, tmd.altitude,
+                 tmd.motor1, tmd.motor2, tmd.motor3, tmd.motor4,
+                 tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
         send_message(message);
         vTaskDelay(pdMS_TO_TICKS(1000)); // Delay de 1000 ms (1 segundo) para el envío de mensajes MQTT
     }
@@ -164,20 +184,39 @@ void imu_task(void *pvParameters)
 
     while (1)
     {
-
+        vTaskDelay(pdMS_TO_TICKS(100));
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
         float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
         float altitude_setpoint = current_altitude + 0.0;       // Setpoint de altitud en metros, un metro por encima de la altitud actual
 
-        // snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw, current_altitude);
-        // send_message(message);
-        imu_data.pitch = -stAngles.fPitch;
-        imu_data.roll = stAngles.fRoll;
-        imu_data.yaw = stAngles.fYaw;
-        imu_data.altitude = current_altitude;
+        tmd.pitch = -stAngles.fPitch;
+        tmd.roll = stAngles.fRoll;
+        tmd.yaw = stAngles.fYaw;
+        tmd.altitude = current_altitude;
 
-        if (get_restart_escs()){
+        tmd.pidpitch = pid_compute(&pid_pitch, 0.0, tmd.pitch);
+        tmd.pidroll = pid_compute(&pid_roll, 0.0, tmd.roll);
+        tmd.pidyaw = pid_compute(&pid_yaw, 0.0, tmd.yaw);
+        tmd.pidalt = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
+
+        // ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
+
+        // Cálculo del throttle para cada motor usando las salidas PID
+        motor1_throttle = base_throttle - tmd.pidpitch + tmd.pidroll + tmd.pidyaw + tmd.pidalt;
+        motor2_throttle = base_throttle + tmd.pidpitch + tmd.pidroll - tmd.pidyaw + tmd.pidalt;
+        motor3_throttle = base_throttle + tmd.pidpitch - tmd.pidroll + tmd.pidyaw + tmd.pidalt;
+        motor4_throttle = base_throttle - tmd.pidpitch - tmd.pidroll - tmd.pidyaw + tmd.pidalt;
+
+        // Limitar los valores de throttle entre 0 y el máximo permitido
+        tmd.motor1 = fmax(min_throttle, fmin(max_throttle, motor1_throttle));
+        tmd.motor2 = fmax(min_throttle, fmin(max_throttle, motor2_throttle));
+        tmd.motor3 = fmax(min_throttle, fmin(max_throttle, motor3_throttle));
+        tmd.motor4 = fmax(min_throttle, fmin(max_throttle, motor4_throttle));
+
+        // ESP_LOGI(TAG, "Motor Throttles: Motor1: %d, Motor2: %d, Motor3: %d, Motor4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
+        if (get_restart_escs())
+        {
             init_escs();
             set_restart_escs(false);
         }
@@ -188,39 +227,13 @@ void imu_task(void *pvParameters)
             dshot_set_throttle(ESC_GPIO_PIN_2, 0, false);
             dshot_set_throttle(ESC_GPIO_PIN_3, 0, false);
             dshot_set_throttle(ESC_GPIO_PIN_4, 0, false);
-            vTaskDelay(pdMS_TO_TICKS(100)); // Wait 100 ms
             continue;
         }
-
-        // Control de los motores basado en los ángulos
-        float pid_output_pitch = pid_compute(&pid_pitch, 0.0, imu_data.pitch);
-        float pid_output_roll = pid_compute(&pid_roll, 0.0, imu_data.roll);
-        float pid_output_yaw = pid_compute(&pid_yaw, 0.0, imu_data.yaw);
-        float pid_output_altitude = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
-
-        // ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", pid_output_pitch, pid_output_roll, pid_output_yaw, pid_output_altitude);
-
-        // Cálculo del throttle para cada motor usando las salidas PID
-        motor1_throttle = base_throttle - pid_output_pitch + pid_output_roll + pid_output_yaw + pid_output_altitude;
-        motor2_throttle = base_throttle + pid_output_pitch + pid_output_roll - pid_output_yaw + pid_output_altitude;
-        motor3_throttle = base_throttle + pid_output_pitch - pid_output_roll + pid_output_yaw + pid_output_altitude;
-        motor4_throttle = base_throttle - pid_output_pitch - pid_output_roll - pid_output_yaw + pid_output_altitude;
-
-        // Limitar los valores de throttle entre 0 y el máximo permitido
-        motor1_throttle = fmax(min_throttle, fmin(max_throttle, motor1_throttle));
-        motor2_throttle = fmax(min_throttle, fmin(max_throttle, motor2_throttle));
-        motor3_throttle = fmax(min_throttle, fmin(max_throttle, motor3_throttle));
-        motor4_throttle = fmax(min_throttle, fmin(max_throttle, motor4_throttle));
-
-        // ESP_LOGI(TAG, "Motor Throttles: Motor1: %d, Motor2: %d, Motor3: %d, Motor4: %d", motor1_throttle, motor2_throttle, motor3_throttle, motor4_throttle);
-
         // Enviar el throttle a los ESCs
-        dshot_set_throttle(ESC_GPIO_PIN_1, motor1_throttle, false);
-        dshot_set_throttle(ESC_GPIO_PIN_2, motor2_throttle, false);
-        dshot_set_throttle(ESC_GPIO_PIN_3, motor3_throttle, false);
-        dshot_set_throttle(ESC_GPIO_PIN_4, motor4_throttle, false);
-
-        vTaskDelay(pdMS_TO_TICKS(10));
+        dshot_set_throttle(ESC_GPIO_PIN_1, tmd.motor1, false);
+        dshot_set_throttle(ESC_GPIO_PIN_2, tmd.motor2, false);
+        dshot_set_throttle(ESC_GPIO_PIN_3, tmd.motor3, false);
+        dshot_set_throttle(ESC_GPIO_PIN_4, tmd.motor4, false);
     }
 }
 
@@ -240,7 +253,6 @@ void app_main()
     init_escs();
     init_wifi();
     init_mqtt();
-
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
     xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
