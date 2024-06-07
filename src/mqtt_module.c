@@ -4,7 +4,28 @@
 
 static const char *TAG = "mqtt_module";
 static esp_mqtt_client_handle_t client;
-bool full_stop = true;
+static bool full_stop = true;
+static bool restart_escs = false;
+
+void set_full_stop(bool value)
+{
+    full_stop = value;
+}
+
+bool get_full_stop(void)
+{
+    return full_stop;
+}
+
+void set_restart_escs(bool value)
+{
+    restart_escs = value;
+}
+
+bool get_restart_escs(void)
+{
+    return restart_escs;
+}
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -19,14 +40,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         break;
     case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA: %.*s", event->data_len, event->data);
+        //ESP_LOGI(TAG, "MQTT_EVENT_DATA: %.*s", event->data_len, event->data);
         if (strncmp(event->data, "s", event->data_len) == 0 && event->data_len == 1) // Verifica longitud correcta
-        {
-            full_stop = true;
+        {   
+            ESP_LOGI(TAG, "Starting ESCS");
+            set_full_stop(true);
         }
         else if (strncmp(event->data, "start", event->data_len) == 0 && event->data_len == 5) // Verifica longitud correcta
-        {
-            full_stop = false;
+        {   
+            ESP_LOGI(TAG, "Stopping ESCS");
+            set_full_stop(false);
+        }
+        else if (strncmp(event->data, "restart", event->data_len) == 0 && event->data_len == 7) // Verifica longitud correcta
+        {   
+            ESP_LOGI(TAG, "Restarting ESCS");
+            set_restart_escs(true);
         }
         break;
     default:

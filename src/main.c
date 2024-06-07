@@ -177,7 +177,12 @@ void imu_task(void *pvParameters)
         imu_data.yaw = stAngles.fYaw;
         imu_data.altitude = current_altitude;
 
-        if (full_stop) // EMERGENCY STOP
+        if (get_restart_escs()){
+            init_escs();
+            set_restart_escs(false);
+        }
+
+        if (get_full_stop()) // EMERGENCY STOP
         {
             dshot_set_throttle(ESC_GPIO_PIN_1, 0, false);
             dshot_set_throttle(ESC_GPIO_PIN_2, 0, false);

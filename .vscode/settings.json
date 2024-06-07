@@ -21,6 +21,7 @@
         "compare": "c",
         "cstdint": "c",
         "10dof_imu.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "mqtt_client.h": "c"
     }
 }
