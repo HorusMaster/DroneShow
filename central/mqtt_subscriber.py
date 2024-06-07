@@ -18,6 +18,15 @@ data = {
     'pitch': deque(maxlen=100),
     'roll': deque(maxlen=100),
     'yaw': deque(maxlen=100),
+    'altitude': deque(maxlen=100),
+    'motor1': deque(maxlen=100),
+    'motor2': deque(maxlen=100),
+    'motor3': deque(maxlen=100),
+    'motor4': deque(maxlen=100),
+    'pidpitch': deque(maxlen=100),
+    'pidroll': deque(maxlen=100),
+    'pidyaw': deque(maxlen=100),
+    'pidalt': deque(maxlen=100),
     'time': deque(maxlen=100)
 }
 
@@ -77,18 +86,29 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(TOPIC)
 
 def on_message(client, userdata, msg):
-    payload = msg.payload.decode()
+    payload = msg.payload.decode()   
     try:
         message = json.loads(payload)
         data['pitch'].append(message['pitch'])
         data['roll'].append(message['roll'])
         data['yaw'].append(message['yaw'])
+        data['altitude'].append(message['altitude'])
+        data['motor1'].append(message['motor1'])
+        data['motor2'].append(message['motor2'])
+        data['motor3'].append(message['motor3'])
+        data['motor4'].append(message['motor4'])
+        data['pidpitch'].append(message['pidpitch'])
+        data['pidroll'].append(message['pidroll'])
+        data['pidyaw'].append(message['pidyaw'])
+        data['pidalt'].append(message['pidalt'])  
         if len(data['time']) == 0:
             data['time'].append(0)
         else:
             data['time'].append(data['time'][-1] + 1)
-    except json.JSONDecodeError:
-        print("Failed to decode JSON message")
+    except json.JSONDecodeError as exc:
+        print("Failed to decode JSON message", exc)
+    except KeyError as e:
+        print(f"Missing key in message: {e}")
 
 def send_command(client):
     while True:
