@@ -20,6 +20,7 @@
         "waveshare_10dof_d.h": "c",
         "compare": "c",
         "cstdint": "c",
-        "10dof_imu.h": "c"
+        "10dof_imu.h": "c",
+        "stdbool.h": "c"
     }
 }

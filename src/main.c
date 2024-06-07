@@ -20,7 +20,6 @@
 #define STACK_SIZE_LARGE 4096
 
 static const char *TAG = "main";
-static bool full_stop = true;
 
 static void i2c_master_init(void)
 {
@@ -126,34 +125,9 @@ float pid_compute(PIDController *pid, float setpoint, float measured)
     return (pid->kP * error) + (pid->kI * pid->integral) + (pid->kD * derivative);
 }
 
-void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
-{
-    esp_mqtt_event_handle_t event = event_data;
-    switch (event->event_id)
-    {
-    case MQTT_EVENT_DATA:
-        ESP_LOGI(TAG, "MQTT_EVENT_DATA: %.*s", event->data_len, event->data);
-        if (strncmp(event->data, "full stop", event->data_len) == 0)
-        {
-            full_stop = true;
-        }
-        else if (strncmp(event->data, "start", event->data_len) == 0)
-        {
-            full_stop = false;
-        }
-        break;
-    default:
-        break;
-    }
-}
-
 void mqtt_task(void *pvParameters)
 {
     char message[100];
-    esp_mqtt_client_handle_t client = (esp_mqtt_client_handle_t)pvParameters;
-    // Suscribirse al tópico "drone/commands"
-    esp_mqtt_client_subscribe(client, "drone/commands", 0);
-
     while (1)
     {
         snprintf(message, sizeof(message), "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f}", imu_data.pitch, imu_data.roll, imu_data.yaw, imu_data.altitude);
