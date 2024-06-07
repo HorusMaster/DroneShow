@@ -6,6 +6,7 @@ import numpy as np
 import json
 from collections import deque
 from threading import Thread
+
 # Configuration
 BROKER_URL = "localhost"  # Update with your MQTT broker address
 BROKER_PORT = 1883
@@ -13,6 +14,7 @@ TOPIC = "drone/telemetry"
 COMMAND_TOPIC = "drone/commands"
 
 graph_thread: Thread = None
+
 # Initialize data storage
 data = {
     'pitch': deque(maxlen=100),
@@ -31,8 +33,8 @@ data = {
 }
 
 # Initialize plot
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+fig = plt.figure(figsize=(14, 7))
+ax = fig.add_subplot(121, projection='3d')
 ax.set_xlim([-1, 1])
 ax.set_ylim([-1, 1])
 ax.set_zlim([-1, 1])
@@ -46,6 +48,13 @@ body = np.array([[0.5, -0.5, 0],
 
 # Initialize the plot elements we want to animate
 plane_body, = ax.plot([], [], [], 'b-')
+
+# Text areas
+ax_text = fig.add_subplot(122)
+ax_text.axis('off')
+
+# Initialize text object
+info_text = ax_text.text(0.05, 0.95, '', transform=ax_text.transAxes, verticalalignment='top', fontsize=12)
 
 def update(frame):
     if len(data['time']) == 0:
@@ -78,7 +87,25 @@ def update(frame):
     plane_body.set_data(rotated_body[:, 0], rotated_body[:, 1])
     plane_body.set_3d_properties(rotated_body[:, 2])
 
-    return plane_body,
+    # Update the text annotations
+    text_str = f"""Pitch: {data['pitch'][-1]:.2f}°
+Roll: {data['roll'][-1]:.2f}°
+Yaw: {data['yaw'][-1]:.2f}°
+Altitude: {data['altitude'][-1]:.2f}m
+
+Motor1: {data['motor1'][-1]:.2f}
+Motor2: {data['motor2'][-1]:.2f}
+Motor3: {data['motor3'][-1]:.2f}
+Motor4: {data['motor4'][-1]:.2f}
+
+PID Pitch: {data['pidpitch'][-1]:.2f}
+PID Roll: {data['pidroll'][-1]:.2f}
+PID Yaw: {data['pidyaw'][-1]:.2f}
+PID Altitude: {data['pidalt'][-1]:.2f}
+"""
+    info_text.set_text(text_str)
+
+    return plane_body, info_text
 
 # MQTT callbacks
 def on_connect(client, userdata, flags, rc):
@@ -136,5 +163,3 @@ ani = FuncAnimation(fig, update, blit=True, interval=100, cache_frame_data=False
 command_thread = Thread(target=send_command, args=(client,), daemon=True)
 command_thread.start()
 plt.show()
-
-
