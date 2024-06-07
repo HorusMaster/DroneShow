@@ -1,46 +1,3 @@
-# import paho.mqtt.client as mqtt
-# import json
-
-# # Datos de conexión al broker MQTT
-# BROKER_URL = "localhost"  # O la IP de tu servidor Mosquitto si está en otra máquina
-# BROKER_PORT = 1883
-# TOPIC = "drone/angles"
-
-# # Función callback cuando el cliente se conecta al broker
-# def on_connect(client, userdata, flags, rc):
-#     print(f"Connected with result code {rc}")
-#     # Suscribirse al tema cuando se conecta
-#     client.subscribe(TOPIC)
-
-# # Función callback cuando se recibe un mensaje
-# def on_message(client, userdata, msg):
-#     print(f"Topic: {msg.topic}")
-#     payload = msg.payload.decode()
-#     print(f"Message: {payload}")
-    
-#     # Procesar el mensaje JSON
-#     try:
-#         data = json.loads(payload)
-#         pitch = data.get('pitch')
-#         roll = data.get('roll')
-#         yaw = data.get('yaw')
-#         print(f"Pitch: {pitch}, Roll: {roll}, Yaw: {yaw}")
-#     except json.JSONDecodeError:
-#         print("Failed to decode JSON message")
-
-# # Crear una instancia de cliente MQTT
-# client = mqtt.Client()
-
-# # Asignar funciones callback
-# client.on_connect = on_connect
-# client.on_message = on_message
-
-# # Conectarse al broker MQTT
-# client.connect(BROKER_URL, BROKER_PORT, 60)
-
-# # Mantener el cliente en funcionamiento para recibir mensajes
-# client.loop_forever()
-
 import paho.mqtt.client as mqtt
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
@@ -48,12 +5,14 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 import json
 from collections import deque
-
+from threading import Thread
 # Configuration
 BROKER_URL = "localhost"  # Update with your MQTT broker address
 BROKER_PORT = 1883
-TOPIC = "drone/angles"
+TOPIC = "drone/telemetry"
+COMMAND_TOPIC = "drone/commands"
 
+graph_thread: Thread = None
 # Initialize data storage
 data = {
     'pitch': deque(maxlen=100),
@@ -131,6 +90,19 @@ def on_message(client, userdata, msg):
     except json.JSONDecodeError:
         print("Failed to decode JSON message")
 
+def send_command(client):
+    while True:
+        command = input("Enter command (start/full-stop: s): ").strip().lower()
+        if command in ["start", "s"]:
+            client.publish(COMMAND_TOPIC, command)
+        elif command == "q":
+            plt.close("all")
+            if graph_thread is not None:                
+                graph_thread.join()
+            break
+        else:
+            print("Invalid command. Please enter 'start' or 'full stop'.")
+
 # Set up MQTT client
 client = mqtt.Client()
 client.on_connect = on_connect
@@ -141,8 +113,8 @@ client.loop_start()
 
 # Set up animation
 ani = FuncAnimation(fig, update, blit=True, interval=100, cache_frame_data=False)
-
+command_thread = Thread(target=send_command, args=(client,), daemon=True)
+command_thread.start()
 plt.show()
-
 
 
