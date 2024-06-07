@@ -14,11 +14,13 @@
 #include "dshot.h"
 #include "10Dof_IMU.h"
 #include "i2c_config.h"
+#include "mqtt_client.h"
 
 #define BLINK_GPIO GPIO_NUM_2
 #define STACK_SIZE_LARGE 4096
 
 static const char *TAG = "main";
+static bool full_stop = true;
 
 static void i2c_master_init(void)
 {
@@ -124,9 +126,33 @@ float pid_compute(PIDController *pid, float setpoint, float measured)
     return (pid->kP * error) + (pid->kI * pid->integral) + (pid->kD * derivative);
 }
 
+void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    esp_mqtt_event_handle_t event = event_data;
+    switch (event->event_id)
+    {
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA: %.*s", event->data_len, event->data);
+        if (strncmp(event->data, "full stop", event->data_len) == 0)
+        {
+            full_stop = true;
+        }
+        else if (strncmp(event->data, "start", event->data_len) == 0)
+        {
+            full_stop = false;
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 void mqtt_task(void *pvParameters)
 {
     char message[100];
+    esp_mqtt_client_handle_t client = (esp_mqtt_client_handle_t)pvParameters;
+    // Suscribirse al tópico "drone/commands"
+    esp_mqtt_client_subscribe(client, "drone/commands", 0);
 
     while (1)
     {
@@ -164,6 +190,7 @@ void imu_task(void *pvParameters)
 
     while (1)
     {
+
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
         float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
@@ -175,6 +202,16 @@ void imu_task(void *pvParameters)
         imu_data.roll = stAngles.fRoll;
         imu_data.yaw = stAngles.fYaw;
         imu_data.altitude = current_altitude;
+
+        if (full_stop) // EMERGENCY STOP
+        {
+            dshot_set_throttle(ESC_GPIO_PIN_1, 0, false);
+            dshot_set_throttle(ESC_GPIO_PIN_2, 0, false);
+            dshot_set_throttle(ESC_GPIO_PIN_3, 0, false);
+            dshot_set_throttle(ESC_GPIO_PIN_4, 0, false);
+            vTaskDelay(pdMS_TO_TICKS(100)); // Wait 100 ms
+            continue;
+        }
 
         // Control de los motores basado en los ángulos
         float pid_output_pitch = pid_compute(&pid_pitch, 0.0, imu_data.pitch);
@@ -225,55 +262,7 @@ void app_main()
     init_wifi();
     init_mqtt();
 
-    // xTaskCreate(i2c_scanner, "i2c_scanner", 1024 * 2, NULL, 10, NULL);
-    // test_motors();
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
     xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
 }
-
-// void test_motors()
-// {
-//     int max_throttle = 1000;
-//     int increment = 10;
-
-//     for (int i = 0; i <= max_throttle; i += increment)
-//     {
-//         dshot_set_throttle(ESC_GPIO_PIN_1, i, false);
-//         dshot_set_throttle(ESC_GPIO_PIN_2, i, false);
-//         dshot_set_throttle(ESC_GPIO_PIN_3, i, false);
-//         dshot_set_throttle(ESC_GPIO_PIN_4, i, false);
-//         vTaskDelay(pdMS_TO_TICKS(50)); // Espera 50ms entre cada incremento
-//     }
-
-//     vTaskDelay(pdMS_TO_TICKS(5000)); // Mantén el throttle en 1000 por 5 segundos
-
-//     for (int i = max_throttle; i >= 0; i -= increment)
-//     {
-//         dshot_set_throttle(ESC_GPIO_PIN_1, i, false);
-//         dshot_set_throttle(ESC_GPIO_PIN_2, i, false);
-//         dshot_set_throttle(ESC_GPIO_PIN_3, i, false);
-//         dshot_set_throttle(ESC_GPIO_PIN_4, i, false);
-//         vTaskDelay(pdMS_TO_TICKS(50)); // Espera 50ms entre cada decremento
-//     }
-// }
-
-// static void i2c_scanner(void *arg)
-// {
-//     int i;
-//     esp_err_t espRc;
-//     for (i = 1; i < 127; i++)
-//     {
-//         i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-//         i2c_master_start(cmd);
-//         i2c_master_write_byte(cmd, (i << 1) | I2C_MASTER_WRITE, true);
-//         i2c_master_stop(cmd);
-//         espRc = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 10 / portTICK_PERIOD_MS);
-//         i2c_cmd_link_delete(cmd);
-//         if (espRc == ESP_OK)
-//         {
-//             ESP_LOGI(TAG, "I2C device found at address: 0x%02x", i);
-//         }
-//     }
-//     vTaskDelete(NULL);
-// }
