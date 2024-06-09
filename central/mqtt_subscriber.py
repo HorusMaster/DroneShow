@@ -33,11 +33,13 @@ data = {
 }
 
 # Initialize plot
-fig = plt.figure(figsize=(14, 7))
-ax = fig.add_subplot(121, projection='3d')
-ax.set_xlim([-1, 1])
-ax.set_ylim([-1, 1])
-ax.set_zlim([-1, 1])
+fig = plt.figure(figsize=(14, 14))
+
+# 3D plot for the drone orientation
+ax_3d = fig.add_subplot(221, projection='3d')
+ax_3d.set_xlim([-1, 1])
+ax_3d.set_ylim([-1, 1])
+ax_3d.set_zlim([-1, 1])
 
 # Create the plane's body
 body = np.array([[0.5, -0.5, 0],
@@ -47,18 +49,19 @@ body = np.array([[0.5, -0.5, 0],
                  [0.5, -0.5, 0]])
 
 # Initialize the plot elements we want to animate
-plane_body, = ax.plot([], [], [], 'b-')
+plane_body, = ax_3d.plot([], [], [], 'b-')
 
-# Text areas
-ax_text = fig.add_subplot(122)
-ax_text.axis('off')
+# Subplots for pitch, roll, and yaw
+ax_pitch = fig.add_subplot(222)
+ax_roll = fig.add_subplot(223)
+ax_yaw = fig.add_subplot(224)
 
 # Initialize text object
-info_text = ax_text.text(0.05, 0.95, '', transform=ax_text.transAxes, verticalalignment='top', fontsize=12)
+info_text = ax_3d.text2D(0.05, 0.95, '', transform=ax_3d.transAxes, verticalalignment='top', fontsize=12)
 
 def update(frame):
     if len(data['time']) == 0:
-        return plane_body,
+        return plane_body, info_text
 
     pitch = np.deg2rad(data['pitch'][-1])
     roll = np.deg2rad(data['roll'][-1])
@@ -83,7 +86,7 @@ def update(frame):
     # Rotate the body of the plane
     rotated_body = np.dot(body, R.T)
 
-    # Update the plot data
+    # Update the 3D plot data
     plane_body.set_data(rotated_body[:, 0], rotated_body[:, 1])
     plane_body.set_3d_properties(rotated_body[:, 2])
 
@@ -105,7 +108,25 @@ PID Altitude: {data['pidalt'][-1]:.2f}
 """
     info_text.set_text(text_str)
 
-    return plane_body, info_text
+    # Update the 2D plots
+    ax_pitch.clear()
+    ax_roll.clear()
+    ax_yaw.clear()
+
+    ax_pitch.plot(data['time'], data['pitch'], label='Pitch')
+    ax_roll.plot(data['time'], data['roll'], label='Roll')
+    ax_yaw.plot(data['time'], data['yaw'], label='Yaw')
+
+    ax_pitch.set_ylabel('Pitch (degrees)')
+    ax_roll.set_ylabel('Roll (degrees)')
+    ax_yaw.set_ylabel('Yaw (degrees)')
+    ax_yaw.set_xlabel('Time (s)')
+
+    ax_pitch.legend()
+    ax_roll.legend()
+    ax_yaw.legend()
+
+    return plane_body, info_text, ax_pitch, ax_roll, ax_yaw
 
 # MQTT callbacks
 def on_connect(client, userdata, flags, rc):
@@ -159,7 +180,7 @@ client.connect(BROKER_URL, BROKER_PORT, 60)
 client.loop_start()
 
 # Set up animation
-ani = FuncAnimation(fig, update, blit=True, interval=100, cache_frame_data=False)
+ani = FuncAnimation(fig, update, blit=False, interval=100, cache_frame_data=False)
 command_thread = Thread(target=send_command, args=(client,), daemon=True)
 command_thread.start()
 plt.show()
