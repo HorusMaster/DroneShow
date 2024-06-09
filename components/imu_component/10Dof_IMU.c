@@ -6,37 +6,81 @@
 BMP280_HandleTypeDef bmp280;
 IMU_ST_SENSOR_DATA gstGyroOffset = {0, 0, 0};
 int32_t gs32Pressure0 = MSLP;
+KalmanFilter kalmanPitch;
+KalmanFilter kalmanRoll;
+KalmanFilter kalmanYaw;
 
 static const char *TAG = "IMU";
 /******************************************************************************
  * interface driver                                                           *
  ******************************************************************************/
 
+
 uint8_t i2c_read_byte(uint8_t dev_addr, uint8_t reg_addr)
 {
-  uint8_t data;
-  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-  esp_err_t ret;
+    uint8_t data;
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    esp_err_t ret;
 
-  ret = i2c_master_start(cmd);
-  assert(ESP_OK == ret);
-  ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
-  assert(ESP_OK == ret);
-  ret = i2c_master_write_byte(cmd, reg_addr, true);
-  assert(ESP_OK == ret);
-  ret = i2c_master_start(cmd);
-  assert(ESP_OK == ret);
-  ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_READ, true);
-  assert(ESP_OK == ret);
-  ret = i2c_master_read_byte(cmd, &data, I2C_MASTER_LAST_NACK);
-  assert(ESP_OK == ret);
-  ret = i2c_master_stop(cmd);
-  assert(ESP_OK == ret);
-  ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_PERIOD_MS);
-  assert(ESP_OK == ret);
-  i2c_cmd_link_delete(cmd);
+    ret = i2c_master_start(cmd);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_start failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
 
-  return data;
+    ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_write_byte failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    ret = i2c_master_write_byte(cmd, reg_addr, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_write_byte failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    ret = i2c_master_start(cmd);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_start failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_READ, true);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_write_byte failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    ret = i2c_master_read_byte(cmd, &data, I2C_MASTER_LAST_NACK);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_read_byte failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    ret = i2c_master_stop(cmd);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_stop failed");
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_PERIOD_MS);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_master_cmd_begin failed: %s", esp_err_to_name(ret));
+        i2c_cmd_link_delete(cmd);
+        return 0;
+    }
+
+    i2c_cmd_link_delete(cmd);
+
+    return data;
 }
 
 void i2c_write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
@@ -101,14 +145,46 @@ void imuInit(IMU_EN_SENSOR_TYPE *penMotionSensorType, IMU_EN_SENSOR_TYPE *penPre
   q2 = 0.0f;
   q3 = 0.0f;
 
+  // Ajustar los parámetros del filtro de Kalman
+  kalmanPitch.q = 0.001;
+  kalmanPitch.r = 0.5; // Aumenta el valor de r para ver si se reduce el ruido
+  kalmanPitch.x = 0;
+  kalmanPitch.p = 1;
+  kalmanPitch.k = 0;
+
+  kalmanRoll.q = 0.001;
+  kalmanRoll.r = 0.5; // Aumenta el valor de r para ver si se reduce el ruido
+  kalmanRoll.x = 0;
+  kalmanRoll.p = 1;
+  kalmanRoll.k = 0;
+
+  kalmanYaw.q = 0.001;
+  kalmanYaw.r = 0.5; // Aumenta el valor de r para ver si se reduce el ruido
+  kalmanYaw.x = 0;
+  kalmanYaw.p = 1;
+  kalmanYaw.k = 0;
+
   return;
+}
+
+
+
+float KalmanUpdate(KalmanFilter *kf, float measurement) {
+  // Prediction update
+  kf->p = kf->p + kf->q;
+  
+  // Measurement update
+  kf->k = kf->p / (kf->p + kf->r);
+  kf->x = kf->x + kf->k * (measurement - kf->x);
+  kf->p = (1 - kf->k) * kf->p;
+  
+  return kf->x;
 }
 
 void imuDataGet(IMU_ST_ANGLES_DATA *pstAngles,
                 IMU_ST_SENSOR_DATA *pstGyroRawData,
                 IMU_ST_SENSOR_DATA *pstAccelRawData,
-                IMU_ST_SENSOR_DATA *pstMagnRawData)
-{
+                IMU_ST_SENSOR_DATA *pstMagnRawData) {
   float MotionVal[9];
   int16_t s16Gyro[3], s16Accel[3], s16Magn[3];
 
@@ -129,9 +205,13 @@ void imuDataGet(IMU_ST_ANGLES_DATA *pstAngles,
                 (float)MotionVal[3], (float)MotionVal[4], (float)MotionVal[5],
                 (float)MotionVal[6], (float)MotionVal[7], MotionVal[8]);
 
-  pstAngles->fPitch = asin(-2 * q1 * q3 + 2 * q0 * q2) * 57.3;                                // pitch
-  pstAngles->fRoll = atan2(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) * 57.3; // roll
-  pstAngles->fYaw = atan2(-2 * q1 * q2 - 2 * q0 * q3, 2 * q2 * q2 + 2 * q3 * q3 - 1) * 57.3;
+  float rawPitch = asin(-2 * q1 * q3 + 2 * q0 * q2) * 57.3;
+  float rawRoll = atan2(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) * 57.3;
+  float rawYaw = atan2(-2 * q1 * q2 - 2 * q0 * q3, 2 * q2 * q2 + 2 * q3 * q3 - 1) * 57.3;
+
+  pstAngles->fPitch = KalmanUpdate(&kalmanPitch, rawPitch);
+  pstAngles->fRoll = KalmanUpdate(&kalmanRoll, rawRoll);
+  pstAngles->fYaw = KalmanUpdate(&kalmanYaw, rawYaw);
 
   pstGyroRawData->s16X = s16Gyro[0];
   pstGyroRawData->s16Y = s16Gyro[1];
