@@ -117,16 +117,35 @@ PID Altitude: {data['pidalt'][-1]:.2f}
     ax_roll.plot(data['time'], data['roll'], label='Roll')
     ax_yaw.plot(data['time'], data['yaw'], label='Yaw')
 
+    # Set static limits for the plots
+    ax_pitch.set_ylim([-20, 20])
+    ax_roll.set_ylim([-20, 20])
+    ax_yaw.set_ylim([-20, 20])
+
+    # Dynamically adjust the x-axis scale to fit the current data
+    if len(data['time']) > 1:
+        x_min = max(0, data['time'][-1] - 100)
+        x_max = data['time'][-1]
+        if x_min != x_max:
+            ax_pitch.set_xlim([x_min, x_max])
+            ax_roll.set_xlim([x_min, x_max])
+            ax_yaw.set_xlim([x_min, x_max])
+
     ax_pitch.set_ylabel('Pitch (degrees)')
     ax_roll.set_ylabel('Roll (degrees)')
     ax_yaw.set_ylabel('Yaw (degrees)')
     ax_yaw.set_xlabel('Time (s)')
+
+    ax_pitch.axhline(0, color='gray', linewidth=0.5)
+    ax_roll.axhline(0, color='gray', linewidth=0.5)
+    ax_yaw.axhline(0, color='gray', linewidth=0.5)
 
     ax_pitch.legend()
     ax_roll.legend()
     ax_yaw.legend()
 
     return plane_body, info_text, ax_pitch, ax_roll, ax_yaw
+
 
 # MQTT callbacks
 def on_connect(client, userdata, flags, rc):
@@ -139,7 +158,8 @@ def on_message(client, userdata, msg):
         message = json.loads(payload)
         data['pitch'].append(message['pitch'])
         data['roll'].append(message['roll'])
-        data['yaw'].append(message['yaw'])
+        #data['yaw'].append(message['yaw'])
+        data['yaw'].append(0.0)
         data['altitude'].append(message['altitude'])
         data['motor1'].append(message['motor1'])
         data['motor2'].append(message['motor2'])
