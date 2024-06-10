@@ -218,7 +218,7 @@ void imu_task(void *pvParameters)
 
     while (1)
     {
-        vTaskDelay(pdMS_TO_TICKS(20)); // 20 ms delay for 50 Hz frequency
+        vTaskDelay(pdMS_TO_TICKS(100)); // 20 ms delay for 50 Hz frequency
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
         float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
@@ -231,8 +231,7 @@ void imu_task(void *pvParameters)
 
         tmd.pidpitch = pid_compute(&pid_pitch, 0.0, tmd.pitch);
         tmd.pidroll = pid_compute(&pid_roll, 0.0, tmd.roll);
-        // tmd.pidyaw = pid_compute(&pid_yaw, 50.0, tmd.yaw);
-        tmd.pidyaw = 0.0;
+        tmd.pidyaw = pid_compute(&pid_yaw, 0.0, tmd.yaw);        
         tmd.pidalt = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);        
 
         // ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
@@ -316,9 +315,9 @@ void app_main()
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     i2c_master_init();
     init_escs();
-    init_wifi();
-    init_mqtt();
+    // init_wifi();
+    // init_mqtt();
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
-    xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
+    //xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
 }
