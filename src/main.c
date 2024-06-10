@@ -138,6 +138,7 @@ void mqtt_task(void *pvParameters)
                  tmd.motor1, tmd.motor2, tmd.motor3, tmd.motor4,
                  tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
         send_message(message);
+        ESP_LOGI(TAG, "Switching to bank 3----------------------------------------------------------------");
         vTaskDelay(pdMS_TO_TICKS(200)); // Delay de 1000 ms (1 segundo) para el envío de mensajes MQTT
     }
 }
@@ -218,7 +219,7 @@ void imu_task(void *pvParameters)
 
     while (1)
     {
-        vTaskDelay(pdMS_TO_TICKS(100)); // 20 ms delay for 50 Hz frequency
+        vTaskDelay(pdMS_TO_TICKS(20)); // 20 ms delay for 50 Hz frequency
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
         float current_altitude = (float)s32AltitudeVal / 100.0; // Convertir la altitud a metros
@@ -231,44 +232,43 @@ void imu_task(void *pvParameters)
 
         tmd.pidpitch = pid_compute(&pid_pitch, 0.0, tmd.pitch);
         tmd.pidroll = pid_compute(&pid_roll, 0.0, tmd.roll);
-        tmd.pidyaw = pid_compute(&pid_yaw, 0.0, tmd.yaw);        
-        tmd.pidalt = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);        
+        tmd.pidyaw = pid_compute(&pid_yaw, 0.0, tmd.yaw);
+        tmd.pidalt = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
 
         // ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
 
-         /*            
-                    X
-                    ^
-        Motor 4 (CW)|           Motor 1 (CCW) 
-        (Top Left)  |           (Top Right)
-                    +---------+
-                    |   Head  |
-                    |         |
-                    |         |           
-                    |         |
-                    |   Tail  |
-                    +--------+ ----> Y
-        Motor 3 (CCW)   Motor 2 (CW)
-        (Bottom Left)  (Bottom Right)
+        /*
+                   X
+                   ^
+       Motor 4 (CW)|           Motor 1 (CCW)
+       (Top Left)  |           (Top Right)
+                   +---------+
+                   |   Head  |
+                   |         |
+                   |         |
+                   |         |
+                   |   Tail  |
+                   +--------+ ----> Y
+       Motor 3 (CCW)   Motor 2 (CW)
+       (Bottom Left)  (Bottom Right)
 
-        Roll positivo (dron se inclina a la derecha):
-        Motores 1 y 2 (derecha): Aumentar throttle.
-        Motores 3 y 4 (izquierda): Disminuir throttle.
+       Roll positivo (dron se inclina a la derecha):
+       Motores 1 y 2 (derecha): Aumentar throttle.
+       Motores 3 y 4 (izquierda): Disminuir throttle.
 
-        Pitch negativo (dron baja la nariz y sube la cola):
-        Motores 1 y 4 (delanteros): Aumentar throttle.
-        Motores 2 y 3 (traseros): Disminuir throttle.
+       Pitch negativo (dron baja la nariz y sube la cola):
+       Motores 1 y 4 (delanteros): Aumentar throttle.
+       Motores 2 y 3 (traseros): Disminuir throttle.
 
-        Yaw positivo (dron gira la nariz a la derecha):
-        Motores 1 y 3 (CCW): Aumentar throttle.
-        Motores 2 y 4 (CW): Disminuir throttle.
-        */
+       Yaw positivo (dron gira la nariz a la derecha):
+       Motores 1 y 3 (CCW): Aumentar throttle.
+       Motores 2 y 4 (CW): Disminuir throttle.
+       */
 
         motor1_throttle = base_throttle + tmd.pidpitch - tmd.pidroll + tmd.pidyaw + tmd.pidalt; // Esquina superior derecha (CCW)
         motor2_throttle = base_throttle - tmd.pidpitch - tmd.pidroll - tmd.pidyaw + tmd.pidalt; // Esquina superior izquierda (CW)
         motor3_throttle = base_throttle - tmd.pidpitch + tmd.pidroll + tmd.pidyaw + tmd.pidalt; // Esquina inferior izquierda (CCW)
         motor4_throttle = base_throttle + tmd.pidpitch + tmd.pidroll - tmd.pidyaw + tmd.pidalt; // Esquina inferior derecha (CW)
-
 
         // Limitar los valores de throttle entre 0 y el máximo permitido
         tmd.motor1 = fmax(min_throttle, fmin(max_throttle, motor1_throttle));
@@ -292,7 +292,7 @@ void imu_task(void *pvParameters)
             dshot_set_throttle(ESC_GPIO_PIN_4, 0, false);
             continue;
         }
-       
+
         // Enviar el throttle a los ESCs
         dshot_set_throttle(ESC_GPIO_PIN_1, tmd.motor1, false); // Esquina superior derecha (CCW)
         dshot_set_throttle(ESC_GPIO_PIN_2, tmd.motor2, false); // Esquina inferior derecha (CW)
@@ -315,9 +315,9 @@ void app_main()
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     i2c_master_init();
     init_escs();
-    // init_wifi();
-    // init_mqtt();
+    init_wifi();
+    init_mqtt();
     xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
     xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
-    //xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
+    xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
 }

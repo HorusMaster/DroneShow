@@ -594,9 +594,7 @@ bool icm20948MagCheck(void) {
     // Leer los registros de identificación del magnetómetro
     icm20948ReadSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_READ,
                           REG_ADD_MAG_WIA1, 2, u8Ret);
-
-    // Registrar los valores leídos para depuración
-    ESP_LOGI(TAG, "MAG_WIA1: 0x%02X, MAG_WIA2: 0x%02X", u8Ret[0], u8Ret[1]);
+    
 
     // Verificar los valores leídos con los valores esperados
     if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2)) {
