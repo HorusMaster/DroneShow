@@ -212,8 +212,8 @@ void imu_task(void *pvParameters)
 
     // Inicializar controladores PID
     PIDController pid_pitch, pid_roll, pid_yaw, pid_altitude;
-    pid_init(&pid_pitch, 1.5, 0.0, 0.0);
-    pid_init(&pid_roll, 0.5, 0.0, 0.0);
+    pid_init(&pid_pitch, 0.5, 0.1, 0.1);
+    pid_init(&pid_roll, 0.5, 0.1, 0.1);
     pid_init(&pid_yaw, 0.1, 0.0, 0.0);
     pid_init(&pid_altitude, 1.0, 0.0, 0.0);
 
@@ -232,7 +232,7 @@ void imu_task(void *pvParameters)
 
         tmd.pidpitch = pid_compute(&pid_pitch, 0.0, tmd.pitch);
         tmd.pidroll = pid_compute(&pid_roll, 0.0, tmd.roll);
-        tmd.pidyaw = pid_compute(&pid_yaw, 0.0, tmd.yaw);
+        tmd.pidyaw = pid_compute(&pid_yaw, -166.0, tmd.yaw);
         tmd.pidalt = pid_compute(&pid_altitude, altitude_setpoint, current_altitude);
 
         // ESP_LOGI(TAG, "PID Outputs: Pitch: %.2f, Roll: %.2f, Yaw: %.2f, Altitude: %.2f", tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
