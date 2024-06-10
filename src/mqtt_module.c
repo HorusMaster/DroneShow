@@ -64,7 +64,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 void init_mqtt(void)
 {
-    vTaskDelay(pdMS_TO_TICKS(1000)); // Let the wifi connect
+    //vTaskDelay(pdMS_TO_TICKS(1000)); // Let the wifi connect
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = "mqtt://192.168.0.116:1883", // Actualiza con la IP de tu máquina Windows
     };

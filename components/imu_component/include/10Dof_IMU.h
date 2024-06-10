@@ -175,6 +175,14 @@ typedef struct
     int32_t T_fine; /*<calibration t_fine data*/
 } BMP280_HandleTypeDef;
 
+typedef struct {
+  float q; // Proceso de ruido de covarianza
+  float r; // Medición de ruido de covarianza
+  float x; // Valor estimado
+  float p; // Error de estimación de covarianza
+  float k; // Ganancia de Kalman
+} KalmanFilter;
+
 typedef struct
 {
     uint8_t Index;
