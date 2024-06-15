@@ -26,6 +26,7 @@
         "usec_time.h": "c",
         "esp_timer.h": "c",
         "system.h": "c",
-        "config.h": "c"
+        "config.h": "c",
+        "wifi_module.h": "c"
     }
 }
