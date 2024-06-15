@@ -22,6 +22,10 @@
         "cstdint": "c",
         "10dof_imu.h": "c",
         "stdbool.h": "c",
-        "mqtt_client.h": "c"
+        "mqtt_client.h": "c",
+        "usec_time.h": "c",
+        "esp_timer.h": "c",
+        "system.h": "c",
+        "config.h": "c"
     }
 }

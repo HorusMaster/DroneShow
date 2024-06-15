@@ -15,6 +15,8 @@
 #include "10Dof_IMU.h"
 #include "i2c_config.h"
 #include "mqtt_client.h"
+#include "system.h"
+#include "config.h"
 
 #define BLINK_GPIO GPIO_NUM_2
 #define STACK_SIZE_LARGE 4096
@@ -138,7 +140,7 @@ void mqtt_task(void *pvParameters)
                  tmd.motor1, tmd.motor2, tmd.motor3, tmd.motor4,
                  tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
         send_message(message);
-        ESP_LOGI(TAG, "Switching to bank 3----------------------------------------------------------------");
+        
         vTaskDelay(pdMS_TO_TICKS(200)); // Delay de 1000 ms (1 segundo) para el envío de mensajes MQTT
     }
 }
@@ -303,21 +305,23 @@ void imu_task(void *pvParameters)
 
 void app_main()
 {
-    esp_err_t ret;
-    ret = nvs_flash_init();
+    esp_err_t ret = nvs_flash_init();
+
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    i2c_master_init();
-    init_escs();
-    init_wifi();
-    init_mqtt();
-    xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
-    xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
-    xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
+    
+
+    systemLaunch();
+    ESP_LOGI(TAG, "SStabilizer task pri %i", STABILIZER_TASK_PRI);
+    // i2c_master_init();
+    // init_escs();
+    // init_wifi();
+    // init_mqtt();
+    // xTaskCreate(blink_task, "blink_task", 1024, NULL, 5, NULL);
+    // xTaskCreate(imu_task, "imu_task", 4096, NULL, 5, NULL);
+    // xTaskCreate(mqtt_task, "mqtt_task", STACK_SIZE_LARGE, NULL, 5, NULL);
 }
