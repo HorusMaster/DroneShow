@@ -27,6 +27,18 @@
         "esp_timer.h": "c",
         "system.h": "c",
         "config.h": "c",
-        "wifi_module.h": "c"
+        "wifi_module.h": "c",
+        "estimator.h": "c",
+        "estimator_kalman.h": "c",
+        "stddef.h": "c",
+        "kalman_core.h": "c",
+        "static_mem.h": "c",
+        "cf_math.h": "c",
+        "xtensa_math.h": "c",
+        "esp_wifi.h": "c",
+        "esp_event.h": "c",
+        "esp_system.h": "c",
+        "math.h": "c",
+        "stm32_legacy.h": "c"
     }
 }

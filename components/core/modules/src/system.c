@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include "freertos/FreeRTOS.h"
 #include "wifi_module.h"
+// #include "estimator.h"
+// #include "estimator_kalman.h"
+
 
 STATIC_MEM_TASK_ALLOC(systemTask, SYSTEM_TASK_STACKSIZE);
 
@@ -19,6 +22,11 @@ void systemLaunch(void)
 void systemTask(void *arg)
 {
   init_wifi();
+
+  //StateEstimatorType estimator = anyEstimator;
+  // estimatorKalmanTaskInit();
+  // stabilizerInit(estimator);
+
 
   {
     while (1)
