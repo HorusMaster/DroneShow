@@ -122,12 +122,12 @@ void imuInit(IMU_EN_SENSOR_TYPE *penMotionSensorType, IMU_EN_SENSOR_TYPE *penPre
   if (bRet == true)
   {
     *penMotionSensorType = IMU_EN_SENSOR_TYPE_ICM20948;
-    ESP_LOGI(TAG, "Motion sensor is ICM-20948");
+    ESP_LOGI(TAG, "IMU is ICM-20948");
     icm20948init();
   }
   else
   {
-    ESP_LOGE(TAG, "Motion sensor is NULL");
+    ESP_LOGE(TAG, "IMU is NULL");
     *penMotionSensorType = IMU_EN_SENSOR_TYPE_NULL;
   }
 
@@ -435,7 +435,7 @@ void icm20948MagRead(int16_t *ps16X, int16_t *ps16Y, int16_t *ps16Z)
   *ps16X = s32OutBuf[0];
   *ps16Y = -s32OutBuf[1];
   *ps16Z = -s32OutBuf[2];
-  //ESP_LOGI(TAG, "X: %d, Y: %d, Z: %d", *ps16X, *ps16Y, *ps16Z);
+  // ESP_LOGI(TAG, "X: %d, Y: %d, Z: %d", *ps16X, *ps16Y, *ps16Z);
   return;
 }
 
@@ -497,7 +497,7 @@ void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, 
   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL);
   u8Temp |= REG_VAL_BIT_I2C_MST_EN;
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
-  vTaskDelay(5 / portTICK_PERIOD_MS);
+  vTaskDelay(10 / portTICK_PERIOD_MS);
   u8Temp &= ~REG_VAL_BIT_I2C_MST_EN;
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
 
