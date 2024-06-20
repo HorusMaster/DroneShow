@@ -6,9 +6,6 @@
 BMP280_HandleTypeDef bmp280;
 IMU_ST_SENSOR_DATA gstGyroOffset = {0, 0, 0};
 int32_t gs32Pressure0 = MSLP;
-KalmanFilter kalmanPitch;
-KalmanFilter kalmanRoll;
-KalmanFilter kalmanYaw;
 
 static const char *TAG = "IMU";
 /******************************************************************************
@@ -152,39 +149,7 @@ void imuInit(IMU_EN_SENSOR_TYPE *penMotionSensorType, IMU_EN_SENSOR_TYPE *penPre
   q2 = 0.0f;
   q3 = 0.0f;
 
-  // Ajustar los parámetros del filtro de Kalman
-  kalmanPitch.q = 0.001;
-  kalmanPitch.r = 0.5; // Aumenta el valor de r para ver si se reduce el ruido
-  kalmanPitch.x = 0;
-  kalmanPitch.p = 1;
-  kalmanPitch.k = 0;
-
-  kalmanRoll.q = 0.001;
-  kalmanRoll.r = 0.5; // Aumenta el valor de r para ver si se reduce el ruido
-  kalmanRoll.x = 0;
-  kalmanRoll.p = 1;
-  kalmanRoll.k = 0;
-
-  kalmanYaw.q = 0.001;
-  kalmanYaw.r = 0.5; // Aumenta el valor de r para ver si se reduce el ruido
-  kalmanYaw.x = 0;
-  kalmanYaw.p = 1;
-  kalmanYaw.k = 0;
-
   return;
-}
-
-float KalmanUpdate(KalmanFilter *kf, float measurement)
-{
-  // Prediction update
-  kf->p = kf->p + kf->q;
-
-  // Measurement update
-  kf->k = kf->p / (kf->p + kf->r);
-  kf->x = kf->x + kf->k * (measurement - kf->x);
-  kf->p = (1 - kf->k) * kf->p;
-
-  return kf->x;
 }
 
 void imuDataGet(IMU_ST_ANGLES_DATA *pstAngles,
@@ -212,13 +177,9 @@ void imuDataGet(IMU_ST_ANGLES_DATA *pstAngles,
                 (float)MotionVal[3], (float)MotionVal[4], (float)MotionVal[5],
                 (float)MotionVal[6], (float)MotionVal[7], MotionVal[8]);
 
-  float rawPitch = asin(-2 * q1 * q3 + 2 * q0 * q2) * 57.3;
-  float rawRoll = atan2(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) * 57.3;
-  float rawYaw = atan2(-2 * q1 * q2 - 2 * q0 * q3, 2 * q2 * q2 + 2 * q3 * q3 - 1) * 57.3;
-
-  pstAngles->fPitch = KalmanUpdate(&kalmanPitch, rawPitch);
-  pstAngles->fRoll = KalmanUpdate(&kalmanRoll, rawRoll);
-  pstAngles->fYaw = KalmanUpdate(&kalmanYaw, rawYaw);
+  pstAngles->fPitch = asin(-2 * q1 * q3 + 2 * q0 * q2) * 57.3;                                // pitch
+  pstAngles->fRoll = atan2(2 * q2 * q3 + 2 * q0 * q1, -2 * q1 * q1 - 2 * q2 * q2 + 1) * 57.3; // roll
+  pstAngles->fYaw = atan2(-2 * q1 * q2 - 2 * q0 * q3, 2 * q2 * q2 + 2 * q3 * q3 - 1) * 57.3;
 
   pstGyroRawData->s16X = s16Gyro[0];
   pstGyroRawData->s16Y = s16Gyro[1];
@@ -474,52 +435,82 @@ void icm20948MagRead(int16_t *ps16X, int16_t *ps16Y, int16_t *ps16Z)
   *ps16X = s32OutBuf[0];
   *ps16Y = -s32OutBuf[1];
   *ps16Z = -s32OutBuf[2];
-  ESP_LOGI(TAG, "X: %d, Y: %d, Z: %d", *ps16X, *ps16Y, *ps16Z);
+  //ESP_LOGI(TAG, "X: %d, Y: %d, Z: %d", *ps16X, *ps16Y, *ps16Z);
   return;
 }
 
-void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, uint8_t *pu8data) {
-    uint8_t i;
-    uint8_t u8Temp;
+// void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, uint8_t *pu8data)
+// {
+//   uint8_t i;
+//   uint8_t u8Temp;
 
-    ESP_LOGI(TAG, "Switching to bank 3");
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
+//   ESP_LOGI(TAG, "Switching to bank 3");
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
 
-    ESP_LOGI(TAG, "Setting I2C address and register address for secondary read");
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_ADDR, u8I2CAddr);
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_REG, u8RegAddr);
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, REG_VAL_BIT_SLV0_EN | u8Len);
+//   ESP_LOGI(TAG, "Setting I2C address and register address for secondary read");
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_ADDR, u8I2CAddr);
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_REG, u8RegAddr);
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, REG_VAL_BIT_SLV0_EN | u8Len);
 
-    ESP_LOGI(TAG, "Switching back to bank 0");
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
+//   ESP_LOGI(TAG, "Switching back to bank 0");
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
 
-    ESP_LOGI(TAG, "Enabling I2C master");
-    u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL);
-    u8Temp |= REG_VAL_BIT_I2C_MST_EN;
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
+//   ESP_LOGI(TAG, "Enabling I2C master");
+//   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL);
+//   u8Temp |= REG_VAL_BIT_I2C_MST_EN;
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
 
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+//   vTaskDelay(5 / portTICK_PERIOD_MS);
 
-    ESP_LOGI(TAG, "Disabling I2C master");
-    u8Temp &= ~REG_VAL_BIT_I2C_MST_EN;
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
+//   ESP_LOGI(TAG, "Disabling I2C master");
+//   u8Temp &= ~REG_VAL_BIT_I2C_MST_EN;
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
 
-    ESP_LOGI(TAG, "Reading data from external sensor");
-    for (i = 0; i < u8Len; i++) {
-        pu8data[i] = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_EXT_SENS_DATA_00 + i);
-        ESP_LOGI(TAG, "Read data[%d]: 0x%02X", i, pu8data[i]);
-    }
+//   ESP_LOGI(TAG, "Reading data from external sensor");
+//   for (i = 0; i < u8Len; i++)
+//   {
+//     pu8data[i] = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_EXT_SENS_DATA_00 + i);
+//     ESP_LOGI(TAG, "Read data[%d]: 0x%02X", i, pu8data[i]);
+//   }
 
-    ESP_LOGI(TAG, "Switching to bank 3 to disable I2C slave");
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
+//   ESP_LOGI(TAG, "Switching to bank 3 to disable I2C slave");
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
 
-    ESP_LOGI(TAG, "Disabling I2C slave 0");
-    u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL);
-    u8Temp &= ~REG_VAL_BIT_SLV0_EN;
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, u8Temp);
+//   ESP_LOGI(TAG, "Disabling I2C slave 0");
+//   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL);
+//   u8Temp &= ~REG_VAL_BIT_SLV0_EN;
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, u8Temp);
 
-    ESP_LOGI(TAG, "Switching back to bank 0");
-    i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
+//   ESP_LOGI(TAG, "Switching back to bank 0");
+//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
+// }
+
+void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, uint8_t *pu8data)
+{
+  uint8_t i;
+  uint8_t u8Temp;
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_ADDR, u8I2CAddr);
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_REG, u8RegAddr);
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, REG_VAL_BIT_SLV0_EN | u8Len);
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
+  u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL);
+  u8Temp |= REG_VAL_BIT_I2C_MST_EN;
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  u8Temp &= ~REG_VAL_BIT_I2C_MST_EN;
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
+
+  for (i = 0; i < u8Len; i++)
+  {
+    pu8data[i] = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_EXT_SENS_DATA_00 + i);
+  }
+
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
+  u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL);
+  u8Temp &= ~REG_VAL_BIT_SLV0_EN;
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, u8Temp);
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
 }
 
 void icm20948WriteSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8data)
@@ -585,26 +576,29 @@ void icm20948GyroOffset(void)
   return;
 }
 
-bool icm20948MagCheck(void) {
-    bool bRet = false;
-    uint8_t u8Ret[2];
+bool icm20948MagCheck(void)
+{
+  bool bRet = false;
+  uint8_t u8Ret[2];
 
-    ESP_LOGI(TAG, "Checking magnetometer...");
+  ESP_LOGI(TAG, "Checking magnetometer...");
 
-    // Leer los registros de identificación del magnetómetro
-    icm20948ReadSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_READ,
-                          REG_ADD_MAG_WIA1, 2, u8Ret);
-    
+  // Leer los registros de identificación del magnetómetro
+  icm20948ReadSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_READ,
+                        REG_ADD_MAG_WIA1, 2, u8Ret);
 
-    // Verificar los valores leídos con los valores esperados
-    if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2)) {
-        bRet = true;
-        ESP_LOGI(TAG, "Magnetometer check passed.");
-    } else {
-        ESP_LOGE(TAG, "Magnetometer check failed.");
-    }
+  // Verificar los valores leídos con los valores esperados
+  if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2))
+  {
+    bRet = true;
+    ESP_LOGI(TAG, "Magnetometer check passed.");
+  }
+  else
+  {
+    ESP_LOGE(TAG, "Magnetometer check failed.");
+  }
 
-    return bRet;
+  return bRet;
 }
 
 bool bmp280Check(void)

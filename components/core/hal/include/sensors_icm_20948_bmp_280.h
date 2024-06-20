@@ -4,16 +4,16 @@
 
 #include "sensors.h"
 
-void sensorsMpu6050Hmc5883lMs5611Init(void);
-bool sensorsMpu6050Hmc5883lMs5611Test(void);
-bool sensorsMpu6050Hmc5883lMs5611AreCalibrated(void);
-bool sensorsMpu6050Hmc5883lMs5611ManufacturingTest(void);
-void sensorsMpu6050Hmc5883lMs5611Acquire(sensorData_t *sensors, const uint32_t tick);
-void sensorsMpu6050Hmc5883lMs5611WaitDataReady(void);
-bool sensorsMpu6050Hmc5883lMs5611ReadGyro(Axis3f *gyro);
-bool sensorsMpu6050Hmc5883lMs5611ReadAcc(Axis3f *acc);
-bool sensorsMpu6050Hmc5883lMs5611ReadMag(Axis3f *mag);
-bool sensorsMpu6050Hmc5883lMs5611ReadBaro(baro_t *baro);
-void sensorsMpu6050Hmc5883lMs5611SetAccMode(accModes accMode);
+void sensorsICM20948BMP280Init(void);
+bool sensorsICM20948BMP280Test(void);
+bool sensorsICM20948BMP280AreCalibrated(void);
+bool sensorsICM20948BMP280ManufacturingTest(void);
+void sensorsICM20948BMP280Acquire(sensorData_t *sensors, const uint32_t tick);
+void sensorsICM20948BMP280WaitDataReady(void);
+bool sensorsICM20948BMP280ReadGyro(Axis3f *gyro);
+bool sensorsICM20948BMP280ReadAcc(Axis3f *acc);
+bool sensorsICM20948BMP280ReadMag(Axis3f *mag);
+bool sensorsICM20948BMP280ReadBaro(baro_t *baro);
+void sensorsICM20948BMP280SetAccMode(accModes accMode);
 
-#endif // __SENSORS_MPU9250_LPS25H_H__
+#endif // __SENSORS_ICM_20948_BMP_280_H__

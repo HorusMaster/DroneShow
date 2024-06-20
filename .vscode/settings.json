@@ -40,6 +40,7 @@
         "esp_system.h": "c",
         "math.h": "c",
         "stm32_legacy.h": "c",
-        "platform.h": "c"
+        "platform.h": "c",
+        "sensors_icm_20948_bmp_280.h": "c"
     }
 }
