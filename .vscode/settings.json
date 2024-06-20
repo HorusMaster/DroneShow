@@ -39,6 +39,7 @@
         "esp_event.h": "c",
         "esp_system.h": "c",
         "math.h": "c",
-        "stm32_legacy.h": "c"
+        "stm32_legacy.h": "c",
+        "platform.h": "c"
     }
 }

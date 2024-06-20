@@ -7,8 +7,24 @@
 #include "config.h"
 #include "esp_log.h"
 #include "stm32_legacy.h"
+#include "cf_math.h"
+#include "physicalConstants.h"
 
 static bool isInit = false;
+
+// static Axis3f accAccumulator;
+// static float thrustAccumulator;
+// static Axis3f gyroAccumulator;
+// static float baroAslAccumulator;
+// static uint32_t accAccumulatorCount;
+// static uint32_t thrustAccumulatorCount;
+// static uint32_t gyroAccumulatorCount;
+// static uint32_t baroAccumulatorCount;
+// static bool quadIsFlying = false;
+// static uint32_t lastFlightCmd;
+// static uint32_t takeoffTime;
+
+// NO_DMA_CCM_SAFE_ZERO_INIT static kalmanCoreData_t coreData;
 
 // Distance-to-point measurements
 static QueueHandle_t distDataQueue;
@@ -89,15 +105,42 @@ static inline bool stateEstimatorHasYawErrorPacket(yawErrorMeasurement_t *error)
 //   return (pdTRUE == xQueueReceive(sweepAnglesDataQueue, angles, 0));
 // }
 
+
+
 static SemaphoreHandle_t runTaskSemaphore; // Semaphore to signal the task to run is available
 
 // Mutex to protect data that is shared between the task and
 // functions called by the stabilizer loop
 static SemaphoreHandle_t dataMutex;
 static StaticSemaphore_t dataMutexBuffer;
+// Data used to enable the task and stabilizer loop to run with minimal locking
+// static state_t taskEstimatorState; // The estimator state produced by the task, copied to the stabilzer when needed.
+// static Axis3f gyroSnapshot; // A snpashot of the latest gyro data, used by the task
+// static Axis3f accSnapshot; // A snpashot of the latest acc data, used by the task
 // Called one time during system startup
-static void kalmanTask(void *parameters);
-STATIC_MEM_TASK_ALLOC_STACK_NO_DMA_CCM_SAFE(kalmanTask, 3 * configMINIMAL_STACK_SIZE);
+//thrust is thrust mapped for 65536 <==> 60 GRAMS!
+#define CONTROL_TO_ACC (GRAVITY_MAGNITUDE*60.0f/(CF_MASS*1000.0f)/65536.0f)
+
+/**
+ * Tuning parameters
+ */
+#define PREDICT_RATE RATE_100_HZ // this is slower than the IMU update rate of 500Hz
+#define BARO_RATE RATE_25_HZ
+
+// the point at which the dynamics change from stationary to flying
+#define IN_FLIGHT_THRUST_THRESHOLD (GRAVITY_MAGNITUDE*0.1f)
+#define IN_FLIGHT_TIME_THRESHOLD (500)
+
+// The bounds on the covariance, these shouldn't be hit, but sometimes are... why?
+#define MAX_COVARIANCE (100)
+#define MIN_COVARIANCE (1e-6f)
+// static void kalmanTask(void *parameters);
+// #ifdef KALMAN_USE_BARO_UPDATE
+// static const bool useBaroUpdate = true;
+// #else
+// static const bool useBaroUpdate = false;
+// #endif
+//STATIC_MEM_TASK_ALLOC_STACK_NO_DMA_CCM_SAFE(kalmanTask, 3 * configMINIMAL_STACK_SIZE);
 
 void estimatorKalmanTaskInit()
 {
@@ -114,16 +157,113 @@ void estimatorKalmanTaskInit()
     runTaskSemaphore = xSemaphoreCreateBinary();
     dataMutex = xSemaphoreCreateMutexStatic(&dataMutexBuffer);
 
-    STATIC_MEM_TASK_CREATE(kalmanTask, kalmanTask, KALMAN_TASK_NAME, NULL, KALMAN_TASK_PRI);
+    //STATIC_MEM_TASK_CREATE(kalmanTask, kalmanTask, KALMAN_TASK_NAME, NULL, KALMAN_TASK_PRI);
 
     isInit = true;
 }
 
-static void kalmanTask(void *parameters)
-{
-    while (true)
-    {
-        ESP_LOGI(KALMAN_TASK_NAME, "Kalman Task Running");
-        vTaskDelay(M2T(1000));
-    }
-}
+// static void kalmanTask(void *parameters)
+// {   
+
+//     while (true)
+//     {
+//         ESP_LOGI(KALMAN_TASK_NAME, "Kalman Task Running");
+//         vTaskDelay(M2T(1000));
+//     }
+// }
+
+
+// void estimatorKalman(state_t *state, sensorData_t *sensors, control_t *control, const uint32_t tick)
+// {
+//   // This function is called from the stabilizer loop. It is important that this call returns
+//   // as quickly as possible. The dataMutex must only be locked short periods by the task.
+//   xSemaphoreTake(dataMutex, portMAX_DELAY);
+
+//   // Average the last IMU measurements. We do this because the prediction loop is
+//   // slower than the IMU loop, but the IMU information is required externally at
+//   // a higher rate (for body rate control).
+//   if (sensorsReadAcc(&sensors->acc)) {
+//     accAccumulator.x += sensors->acc.x;
+//     accAccumulator.y += sensors->acc.y;
+//     accAccumulator.z += sensors->acc.z;
+//     accAccumulatorCount++;
+//   }
+
+//   if (sensorsReadGyro(&sensors->gyro)) {
+//     gyroAccumulator.x += sensors->gyro.x;
+//     gyroAccumulator.y += sensors->gyro.y;
+//     gyroAccumulator.z += sensors->gyro.z;
+//     gyroAccumulatorCount++;
+//   }
+
+//   // Average the thrust command from the last time steps, generated externally by the controller
+//   thrustAccumulator += control->thrust;
+//   thrustAccumulatorCount++;
+
+//   // Average barometer data
+//   if (useBaroUpdate) {
+//     if (sensorsReadBaro(&sensors->baro)) {
+//       baroAslAccumulator += sensors->baro.asl;
+//       baroAccumulatorCount++;
+//     }
+//   }
+
+//   // Make a copy of sensor data to be used by the task
+//   memcpy(&gyroSnapshot, &sensors->gyro, sizeof(gyroSnapshot));
+//   memcpy(&accSnapshot, &sensors->acc, sizeof(accSnapshot));
+
+//   // Copy the latest state, calculated by the task
+//   memcpy(state, &taskEstimatorState, sizeof(state_t));
+//   xSemaphoreGive(dataMutex);
+
+//   xSemaphoreGive(runTaskSemaphore);
+// }
+
+// static bool predictStateForward(uint32_t osTick, float dt) {
+//   if (gyroAccumulatorCount == 0
+//       || accAccumulatorCount == 0
+//       || thrustAccumulatorCount == 0)
+//   {
+//     return false;
+//   }
+
+//   xSemaphoreTake(dataMutex, portMAX_DELAY);
+
+//   // gyro is in deg/sec but the estimator requires rad/sec
+//   Axis3f gyroAverage;
+//   gyroAverage.x = gyroAccumulator.x * DEG_TO_RAD / gyroAccumulatorCount;
+//   gyroAverage.y = gyroAccumulator.y * DEG_TO_RAD / gyroAccumulatorCount;
+//   gyroAverage.z = gyroAccumulator.z * DEG_TO_RAD / gyroAccumulatorCount;
+
+//   // accelerometer is in Gs but the estimator requires ms^-2
+//   Axis3f accAverage;
+//   accAverage.x = accAccumulator.x * GRAVITY_MAGNITUDE / accAccumulatorCount;
+//   accAverage.y = accAccumulator.y * GRAVITY_MAGNITUDE / accAccumulatorCount;
+//   accAverage.z = accAccumulator.z * GRAVITY_MAGNITUDE / accAccumulatorCount;
+
+//   // thrust is in grams, we need ms^-2
+//   float thrustAverage = thrustAccumulator * CONTROL_TO_ACC / thrustAccumulatorCount;
+
+//   accAccumulator = (Axis3f){.axis={0}};
+//   accAccumulatorCount = 0;
+//   gyroAccumulator = (Axis3f){.axis={0}};
+//   gyroAccumulatorCount = 0;
+//   thrustAccumulator = 0;
+//   thrustAccumulatorCount = 0;
+
+//   xSemaphoreGive(dataMutex);
+
+//   // TODO: Find a better check for whether the quad is flying
+//   // Assume that the flight begins when the thrust is large enough and for now we never stop "flying".
+//   if (thrustAverage > IN_FLIGHT_THRUST_THRESHOLD) {
+//     lastFlightCmd = osTick;
+//     if (!quadIsFlying) {
+//       takeoffTime = lastFlightCmd;
+//     }
+//   }
+//   quadIsFlying = (osTick-lastFlightCmd) < IN_FLIGHT_TIME_THRESHOLD;
+
+//   kalmanCorePredict(&coreData, thrustAverage, &accAverage, &gyroAverage, dt, quadIsFlying);
+
+//   return true;
+// }
