@@ -9,6 +9,7 @@
 #include "sensors.h"
 #include "system.h"
 #include "mqtt_module.h"
+#include "rateSupervisor.h"
 
 static const char *TAG = "stabilizer";
 static bool isInit;
@@ -20,12 +21,15 @@ static control_t control;
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 STATIC_MEM_TASK_ALLOC(mqttTask, STABILIZER_TASK_STACKSIZE);
 
+static rateSupervisor_t rateSupervisorContext;
+static bool rateWarningDisplayed = false;
+
 static void mqttTask(void *param)
 {
   while (1)
-  { 
+  {
     send_message(&state);
-    vTaskDelay(M2T(200));
+    vTaskDelay(M2T(100));
   }
 }
 
@@ -34,6 +38,8 @@ static void stabilizerTask(void *param)
   uint32_t tick;
   systemWaitStart();
   tick = 1;
+  rateSupervisorInit(&rateSupervisorContext, xTaskGetTickCount(), M2T(1000), 997, 1003, 1);
+
   while (1)
   {
     sensorsWaitDataReady();
@@ -41,7 +47,14 @@ static void stabilizerTask(void *param)
     stateEstimator(&state, &sensorData, &control, tick);
     //(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state.attitude.roll, state.attitude.pitch, state.attitude.yaw);
     tick++;
-    vTaskDelay(M2T(20));
+    if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount()))
+    {
+      if (!rateWarningDisplayed)
+      {
+        ESP_LOGW(TAG, "WARNING: stabilizer loop rate is off (%" PRIu32 ")\n", rateSupervisorLatestCount(&rateSupervisorContext));
+        rateWarningDisplayed = true;
+      }
+    }
   }
 }
 
