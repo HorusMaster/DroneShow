@@ -23,9 +23,10 @@ static void stabilizerTask(void *param)
   tick = 1;
   while (1)
   {    
-    sensorsAcquire(&sensorData, tick);    
-    stateEstimator(&state, &sensorData, &control, tick);    
-    vTaskDelay(M2T(1000));
+    //sensorsAcquire(&sensorData, tick);    
+    stateEstimator(&state, &sensorData, &control, tick);        
+    tick++;
+    vTaskDelay(M2T(20));
   }
 }
 

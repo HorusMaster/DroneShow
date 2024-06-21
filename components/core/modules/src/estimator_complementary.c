@@ -71,40 +71,41 @@ bool estimatorComplementaryTest(void)
 
 void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t *control, const uint32_t tick)
 {   
-  ESP_LOGI(TAG, "Gyro: %f %f %f", sensorData->gyro.x, sensorData->gyro.y, sensorData->gyro.z);
-  ESP_LOGI(TAG, "Acc: %f %f %f", sensorData->acc.x, sensorData->acc.y, sensorData->acc.z);
-  ESP_LOGI(TAG, "Mag: %f %f %f", sensorData->mag.x, sensorData->mag.y, sensorData->mag.z);
-  ESP_LOGI(TAG, "Baro: %f, Altitud:%f", sensorData->baro.pressure, sensorData->baro.asl);
-  // sensorsAcquire(sensorData, tick); // Read sensors at full rate (1000Hz)
-  // if (RATE_DO_EXECUTE(ATTITUDE_UPDATE_RATE, tick)) {
-  //   sensfusion6UpdateQ(sensorData->gyro.x, sensorData->gyro.y, sensorData->gyro.z,
-  //                      sensorData->acc.x, sensorData->acc.y, sensorData->acc.z,
-  //                      ATTITUDE_UPDATE_DT);
+ 
+  sensorsAcquire(sensorData, tick); // Read sensors at full rate (1000Hz)
+  //ESP_LOGI(TAG, "Gyro: %f %f %f", sensorData->gyro.x, sensorData->gyro.y, sensorData->gyro.z);
+  // ESP_LOGI(TAG, "Acc: %f %f %f", sensorData->acc.x, sensorData->acc.y, sensorData->acc.z);
+  //ESP_LOGI(TAG, "Mag: %f %f %f", sensorData->mag.x, sensorData->mag.y, sensorData->mag.z);
+  // ESP_LOGI(TAG, "Baro: %f, Altitud:%f", sensorData->baro.pressure, sensorData->baro.asl);
+  if (RATE_DO_EXECUTE(ATTITUDE_UPDATE_RATE, tick)) {
+    sensfusion6UpdateQ(sensorData->gyro.x, sensorData->gyro.y, sensorData->gyro.z,
+                       sensorData->acc.x, sensorData->acc.y, sensorData->acc.z,
+                       ATTITUDE_UPDATE_DT);
 
-  //   // Save attitude, adjusted for the legacy CF2 body coordinate system
-  //   sensfusion6GetEulerRPY(&state->attitude.roll, &state->attitude.pitch, &state->attitude.yaw);
+    // Save attitude, adjusted for the legacy CF2 body coordinate system
+    sensfusion6GetEulerRPY(&state->attitude.roll, &state->attitude.pitch, &state->attitude.yaw);
+    ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state->attitude.roll, state->attitude.pitch, state->attitude.yaw);
+    // Save quaternion, hopefully one day this could be used in a better controller.
+    // Note that this is not adjusted for the legacy coordinate system
+    sensfusion6GetQuaternion(
+      &state->attitudeQuaternion.x,
+      &state->attitudeQuaternion.y,
+      &state->attitudeQuaternion.z,
+      &state->attitudeQuaternion.w);
 
-  //   // Save quaternion, hopefully one day this could be used in a better controller.
-  //   // Note that this is not adjusted for the legacy coordinate system
-  //   sensfusion6GetQuaternion(
-  //     &state->attitudeQuaternion.x,
-  //     &state->attitudeQuaternion.y,
-  //     &state->attitudeQuaternion.z,
-  //     &state->attitudeQuaternion.w);
+    state->acc.z = sensfusion6GetAccZWithoutGravity(sensorData->acc.x,
+                                                    sensorData->acc.y,
+                                                    sensorData->acc.z);
 
-  //   state->acc.z = sensfusion6GetAccZWithoutGravity(sensorData->acc.x,
-  //                                                   sensorData->acc.y,
-  //                                                   sensorData->acc.z);
+    positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
+  }
 
-  //   positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
-  // }
+  if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
+    tofMeasurement_t tofMeasurement;
 
-  // if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
-  //   tofMeasurement_t tofMeasurement;
-
-  //   latestTofMeasurement(&tofMeasurement);
-  //   positionEstimate(state, sensorData, &tofMeasurement, POS_UPDATE_DT, tick);
-  // }
+    latestTofMeasurement(&tofMeasurement);
+    positionEstimate(state, sensorData, &tofMeasurement, POS_UPDATE_DT, tick);
+  }
 }
 
 static bool latestTofMeasurement(tofMeasurement_t* tofMeasurement) {

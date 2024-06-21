@@ -119,7 +119,7 @@ static void sensorsTask(void *arg)
     while (1)
     {
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-
+        
         processSensorData(&stGyroRawData, &stAccelRawData);
         pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
 
