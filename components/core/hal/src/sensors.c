@@ -76,7 +76,7 @@ static const sensorsImplementation_t sensorImplementations[SensorImplementation_
         // .areCalibrated = sensorsBmi088Bmp388AreCalibrated,
         // .manufacturingTest = sensorsBmi088Bmp388ManufacturingTest,
         .acquire = sensorsICM20948BMP280Acquire,
-        // .waitDataReady = sensorsBmi088Bmp388WaitDataReady,
+        .waitDataReady = sensorsICM20948BMP280WaitDataReady,
         .readGyro = sensorsICM20948BMP280ReadGyro,
         .readAcc = sensorsICM20948BMP280ReadAcc,
         .readMag = sensorsICM20948BMP280ReadMag,

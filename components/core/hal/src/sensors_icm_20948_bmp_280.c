@@ -122,17 +122,11 @@ static void sensorsTask(void *arg)
     ESP_LOGI(TAG, "sensorsTask started");
     while (1)
     {
-        imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-        ESP_LOGI(TAG, "Pitch: %f, Roll: %f, Yaw: %f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw);
         if (pdTRUE == xSemaphoreTake(sensorsDataReady, portMAX_DELAY))
         {
             sensorData.interruptTimestamp = imuIntTimestamp;
-
-            // ESP_LOGI(TAG, "Timestamp: %llu", sensorData.interruptTimestamp);
-
             imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-            ESP_LOGI(TAG, "Pitch: %f, Roll: %f, Yaw: %f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw);
-
+            //ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", stAngles.fRoll, stAngles.fPitch, stAngles.fYaw);
             processSensorData(&stGyroRawData, &stAccelRawData);
             pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
 
@@ -159,12 +153,13 @@ static void sensorsTask(void *arg)
             {
                 xQueueOverwrite(barometerDataQueue, &sensorData.baro);
             }
+            xSemaphoreGive(dataReady);
 #ifdef DEBUG_EP2
             ESP_LOGI(TAG, "Pitch: %f, Roll: %f, Yaw: %f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw);
             ESP_LOGI(TAG, "Temperature: %f, Pressure: %f, Altitude: %f", sensorData.baro.temperature, sensorData.baro.pressure, sensorData.baro.asl);
 #endif
         }
-        vTaskDelay(M2T(500));
+        //vTaskDelay(M2T(500));      
     }
 }
 
@@ -228,4 +223,10 @@ void sensorsICM20948BMP280Init(void)
     sensorsInterruptInit();
     sensorsTaskInit();
     isInit = true;
+}
+
+
+void sensorsICM20948BMP280WaitDataReady(void)
+{
+    xSemaphoreTake(dataReady, portMAX_DELAY);
 }

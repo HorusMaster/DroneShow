@@ -23,10 +23,12 @@ static void stabilizerTask(void *param)
   tick = 1;
   while (1)
   {    
+    sensorsWaitDataReady();
     //sensorsAcquire(&sensorData, tick);    
-    stateEstimator(&state, &sensorData, &control, tick);        
+    stateEstimator(&state, &sensorData, &control, tick); 
+    ESP_LOGI(TAG, "State: %f %f %f", state.attitude.pitch, state.attitude.roll, state.attitude.yaw);       
     tick++;
-    vTaskDelay(M2T(20));
+    vTaskDelay(M2T(200));
   }
 }
 
