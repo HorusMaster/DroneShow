@@ -7,6 +7,8 @@
 #include "freertos/FreeRTOS.h"
 #include "estimator.h"
 #include "sensors.h"
+#include "system.h"
+#include "mqtt_module.h"
 
 static const char *TAG = "stabilizer";
 static bool isInit;
@@ -16,19 +18,30 @@ static sensorData_t sensorData;
 static control_t control;
 // Se debe de incluir FREERTOS para el error de unknown type name 'StackType_t'
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
+STATIC_MEM_TASK_ALLOC(mqttTask, STABILIZER_TASK_STACKSIZE);
+
+static void mqttTask(void *param)
+{
+  while (1)
+  { 
+    send_message(&state);
+    vTaskDelay(M2T(200));
+  }
+}
 
 static void stabilizerTask(void *param)
 {
   uint32_t tick;
+  systemWaitStart();
   tick = 1;
   while (1)
   {
     sensorsWaitDataReady();
     // sensorsAcquire(&sensorData, tick);
     stateEstimator(&state, &sensorData, &control, tick);
-    ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state.attitude.roll, state.attitude.pitch, state.attitude.yaw);
+    //(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state.attitude.roll, state.attitude.pitch, state.attitude.yaw);
     tick++;
-    vTaskDelay(M2T(50));
+    vTaskDelay(M2T(20));
   }
 }
 
@@ -40,6 +53,7 @@ void stabilizerInit(StateEstimatorType estimator)
   stateEstimatorInit(estimator);
 
   STATIC_MEM_TASK_CREATE(stabilizerTask, stabilizerTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
+  STATIC_MEM_TASK_CREATE(mqttTask, mqttTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
 
   isInit = true;
 }

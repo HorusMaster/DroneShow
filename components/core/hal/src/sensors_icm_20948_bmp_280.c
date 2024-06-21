@@ -117,7 +117,7 @@ static void sensorsTask(void *arg)
     IMU_ST_SENSOR_DATA stAccelRawData;
     IMU_ST_SENSOR_DATA stMagnRawData;
     int32_t s32PressureVal = 0, s32TemperatureVal = 0, s32AltitudeVal = 0;
-    // systemWaitStart();
+    systemWaitStart();
     vTaskDelay(M2T(200));
     ESP_LOGI(TAG, "sensorsTask started");
     while (1)

@@ -33,6 +33,7 @@
 static const char *TAG = "sensfusion6";
 
 //#define MADWICK_QUATERNION_IMU
+#define INTEGRAL_LIMIT 0.5f
 
 #ifdef MADWICK_QUATERNION_IMU
   #define BETA_DEF     0.01f    // 2 * proportional gain
@@ -216,6 +217,12 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
       integralFBx += twoKi * halfex * dt;  // integral error scaled by Ki
       integralFBy += twoKi * halfey * dt;
       integralFBz += twoKi * halfez * dt;
+
+        // Apply limits to prevent integral windup
+      integralFBx = fmaxf(fminf(integralFBx, INTEGRAL_LIMIT), -INTEGRAL_LIMIT);
+      integralFBy = fmaxf(fminf(integralFBy, INTEGRAL_LIMIT), -INTEGRAL_LIMIT);
+      integralFBz = fmaxf(fminf(integralFBz, INTEGRAL_LIMIT), -INTEGRAL_LIMIT);
+
       gx += integralFBx;  // apply integral feedback
       gy += integralFBy;
       gz += integralFBz;

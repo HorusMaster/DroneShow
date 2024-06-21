@@ -18,7 +18,6 @@
 #include "system.h"
 #include "config.h"
 
-
 #define BLINK_GPIO GPIO_NUM_2
 #define STACK_SIZE_LARGE 4096
 
@@ -317,7 +316,7 @@ void app_main()
     
 
     systemLaunch();
-    ESP_LOGI(TAG, "SStabilizer task pri %i", STABILIZER_TASK_PRI);
+    ESP_LOGI(TAG, "Stabilizer task pri %i", STABILIZER_TASK_PRI);
     // i2c_master_init();
     // init_escs();
     // init_wifi();

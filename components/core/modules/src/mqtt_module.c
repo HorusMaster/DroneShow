@@ -1,11 +1,13 @@
 #include "mqtt_module.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
+#include "stabilizer_types.h"
 
 static const char *TAG = "mqtt_module";
 static esp_mqtt_client_handle_t client;
 static bool full_stop = true;
 static bool restart_escs = false;
+static char message[512];
 
 void set_full_stop(bool value)
 {
@@ -64,7 +66,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 void init_mqtt(void)
 {
-    //vTaskDelay(pdMS_TO_TICKS(1000)); // Let the wifi connect
+    // vTaskDelay(pdMS_TO_TICKS(1000)); // Let the wifi connect
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = "mqtt://192.168.0.116:1883", // Actualiza con la IP de tu máquina Windows
     };
@@ -75,7 +77,15 @@ void init_mqtt(void)
     ESP_LOGI(TAG, "MQTT client started");
 }
 
-void send_message(const char *message)
+void send_message(state_t *state)
 {
+
+    snprintf(message, sizeof(message),
+             "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f, "
+             "\"motor1\": %.2f, \"motor2\": %.2f, \"motor3\": %.2f, \"motor4\": %.2f, "
+             "\"pidpitch\": %.2f, \"pidroll\": %.2f, \"pidyaw\": %.2f, \"pidalt\": %.2f}",
+             state->attitude.pitch, state->attitude.roll, state->attitude.yaw, 0.0,
+             0.0, 0.0, 0.0, 0.0,
+             0.0, 0.0, 0.0, 0.0);
     esp_mqtt_client_publish(client, "drone/telemetry", message, 0, 1, 0);
 }

@@ -10,6 +10,7 @@
 #include "stm32_legacy.h"
 #include "sensors.h"
 #include "stabilizer.h"
+#include "mqtt_module.h"
 
 static bool isInit;
 SemaphoreHandle_t canStartMutex;
@@ -34,7 +35,8 @@ void systemInit(void)
   canStartMutex = xSemaphoreCreateMutexStatic(&canStartMutexBuffer);
   xSemaphoreTake(canStartMutex, portMAX_DELAY);
 
-  //init_wifi();
+  init_wifi();
+  init_mqtt();
 
   isInit = true;
 }
@@ -46,7 +48,7 @@ void systemTask(void *arg)
   StateEstimatorType estimator = anyEstimator;
   //estimatorKalmanTaskInit();
   stabilizerInit(estimator);
-
+  systemStart();
   {
     while (1)
     {

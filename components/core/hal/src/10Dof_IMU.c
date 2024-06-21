@@ -87,24 +87,35 @@ uint8_t i2c_read_byte(uint8_t dev_addr, uint8_t reg_addr)
   return data;
 }
 
+#define I2C_CHECK(a, str, ret_val) if (!(a)) { \
+        ESP_LOGE("I2C", "%s:%d (%s): %s", __FILE__, __LINE__, __FUNCTION__, str); \
+        return ret_val; \
+    }
+
 void i2c_write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
 {
-  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-  esp_err_t ret;
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    esp_err_t ret;
 
-  ret = i2c_master_start(cmd);
-  assert(ESP_OK == ret);
-  ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
-  assert(ESP_OK == ret);
-  ret = i2c_master_write_byte(cmd, reg_addr, true);
-  assert(ESP_OK == ret);
-  ret = i2c_master_write_byte(cmd, data, true);
-  assert(ESP_OK == ret);
-  ret = i2c_master_stop(cmd);
-  assert(ESP_OK == ret);
-  ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_PERIOD_MS);
-  assert(ESP_OK == ret);
-  i2c_cmd_link_delete(cmd);
+    ret = i2c_master_start(cmd);
+    I2C_CHECK(ret == ESP_OK, "i2c_master_start failed", );
+
+    ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
+    I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (address) failed", i2c_cmd_link_delete(cmd); return;);
+
+    ret = i2c_master_write_byte(cmd, reg_addr, true);
+    I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (register) failed", i2c_cmd_link_delete(cmd); return;);
+
+    ret = i2c_master_write_byte(cmd, data, true);
+    I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (data) failed", i2c_cmd_link_delete(cmd); return;);
+
+    ret = i2c_master_stop(cmd);
+    I2C_CHECK(ret == ESP_OK, "i2c_master_stop failed", i2c_cmd_link_delete(cmd); return;);
+
+    ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_PERIOD_MS);
+    I2C_CHECK(ret == ESP_OK, "i2c_master_cmd_begin failed", i2c_cmd_link_delete(cmd); return;);
+
+    i2c_cmd_link_delete(cmd);
 }
 /******************************************************************************
  * IMU module                                                                 *
@@ -291,7 +302,7 @@ void icm20948init(void)
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_PWR_MIGMT_1, REG_VAL_ALL_RGE_RESET);
   vTaskDelay(10 / portTICK_PERIOD_MS);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_PWR_MIGMT_1, REG_VAL_RUN_MODE);
-    
+
   /* Configuración del giroscopio y acelerómetro user bank 2 register */
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_2);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_GYRO_SMPLRT_DIV, 0x07);
@@ -332,17 +343,8 @@ void icm20948init(void)
   uint8_t int_enable_1 = 0x01; // Habilitar interrupción de datos listos
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE_1, int_enable_1);
 
-  uint8_t int_pin_cfg_r = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_INT_PIN_CFG);
-  uint8_t int_enable_r = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE);
-  uint8_t int_enable_1_r = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE_1);
-
-  ESP_LOGI(TAG, "REG_ADD_INT_PIN_CFG: 0x%02X", int_pin_cfg_r);
-  ESP_LOGI(TAG, "REG_ADD_INT_ENABLE: 0x%02X", int_enable_r);
-  ESP_LOGI(TAG, "REG_ADD_INT_ENABLE_1: 0x%02X", int_enable_1_r);
-
   return;
 }
-
 
 bool icm20948Check(void)
 {
@@ -459,52 +461,6 @@ void icm20948MagRead(int16_t *ps16X, int16_t *ps16Y, int16_t *ps16Z)
   return;
 }
 
-// void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, uint8_t *pu8data)
-// {
-//   uint8_t i;
-//   uint8_t u8Temp;
-
-//   ESP_LOGI(TAG, "Switching to bank 3");
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
-
-//   ESP_LOGI(TAG, "Setting I2C address and register address for secondary read");
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_ADDR, u8I2CAddr);
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_REG, u8RegAddr);
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, REG_VAL_BIT_SLV0_EN | u8Len);
-
-//   ESP_LOGI(TAG, "Switching back to bank 0");
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
-
-//   ESP_LOGI(TAG, "Enabling I2C master");
-//   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL);
-//   u8Temp |= REG_VAL_BIT_I2C_MST_EN;
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
-
-//   vTaskDelay(5 / portTICK_PERIOD_MS);
-
-//   ESP_LOGI(TAG, "Disabling I2C master");
-//   u8Temp &= ~REG_VAL_BIT_I2C_MST_EN;
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_USER_CTRL, u8Temp);
-
-//   ESP_LOGI(TAG, "Reading data from external sensor");
-//   for (i = 0; i < u8Len; i++)
-//   {
-//     pu8data[i] = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_EXT_SENS_DATA_00 + i);
-//     ESP_LOGI(TAG, "Read data[%d]: 0x%02X", i, pu8data[i]);
-//   }
-
-//   ESP_LOGI(TAG, "Switching to bank 3 to disable I2C slave");
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_3); // switch bank3
-
-//   ESP_LOGI(TAG, "Disabling I2C slave 0");
-//   u8Temp = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL);
-//   u8Temp &= ~REG_VAL_BIT_SLV0_EN;
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_I2C_SLV0_CTRL, u8Temp);
-
-//   ESP_LOGI(TAG, "Switching back to bank 0");
-//   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0); // switch bank0
-// }
-
 void icm20948ReadSecondary(uint8_t u8I2CAddr, uint8_t u8RegAddr, uint8_t u8Len, uint8_t *pu8data)
 {
   uint8_t i;
@@ -599,14 +555,14 @@ void icm20948GyroOffset(void)
 bool icm20948MagCheck(void)
 {
   bool bRet = false;
-  uint8_t u8Ret[2];  
+  uint8_t u8Ret[2];
 
   // Leer los registros de identificación del magnetómetro
   icm20948ReadSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_READ,
                         REG_ADD_MAG_WIA1, 2, u8Ret);
 
   // Verificar los valores leídos con los valores esperados
-  if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2)) 
+  if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2))
   {
     bRet = true;
   }

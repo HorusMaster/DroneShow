@@ -1,8 +1,10 @@
 #ifndef MQTT_MODULE_H
 #define MQTT_MODULE_H
 
+#include "stabilizer_types.h"
+
 void init_mqtt(void);
-void send_message(const char* message);
+void send_message(state_t* state);
 #include <stdbool.h>
 void set_full_stop(bool value);
 bool get_full_stop(void);
