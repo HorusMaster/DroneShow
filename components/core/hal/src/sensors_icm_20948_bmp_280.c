@@ -159,7 +159,7 @@ static void sensorsTask(void *arg)
             ESP_LOGI(TAG, "Temperature: %f, Pressure: %f, Altitude: %f", sensorData.baro.temperature, sensorData.baro.pressure, sensorData.baro.asl);
 #endif
         }
-        //vTaskDelay(M2T(500));      
+        vTaskDelay(M2T(20));      
     }
 }
 

@@ -25,12 +25,12 @@
  */
 #include <math.h>
 
-#include "sensfusion6.h"
+#include "sensfusion9.h"
 // #include "param.h"
 #include "physicalConstants.h"
 #include "esp_log.h"
 
-static const char *TAG = "sensfusion6";
+static const char *TAG = "sensfusion9";
 
 //#define MADWICK_QUATERNION_IMU
 
@@ -67,14 +67,14 @@ static bool isInit;
 
 static bool isCalibrated = false;
 
-static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float dt);
-static float sensfusion6GetAccZ(const float ax, const float ay, const float az);
+static void sensfusion9UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt);
+static float sensfusion9GetAccZ(const float ax, const float ay, const float az);
 static void estimatedGravityDirection(float* gx, float* gy, float* gz);
 
 // TODO: Make math util file
 static float invSqrt(float x);
 
-void sensfusion6Init()
+void sensfusion9Init()
 {
   if(isInit)
     return;
@@ -82,18 +82,18 @@ void sensfusion6Init()
   isInit = true;
 }
 
-bool sensfusion6Test(void)
+bool sensfusion9Test(void)
 {
   return isInit;
 }
 
-void sensfusion6UpdateQ(float gx, float gy, float gz, float ax, float ay, float az, float dt)
+void sensfusion9UpdateQ(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt)
 {
-  sensfusion6UpdateQImpl(gx, gy, gz, ax, ay, az, dt);
+  sensfusion9UpdateQImpl(gx, gy, gz, ax, ay, az, mx, my, mz, dt);
   estimatedGravityDirection(&gravX, &gravY, &gravZ);
 
   if (!isCalibrated) {
-    baseZacc = sensfusion6GetAccZ(ax, ay, az);
+    baseZacc = sensfusion9GetAccZ(ax, ay, az);
     isCalibrated = true;
   }
 }
@@ -105,7 +105,7 @@ void sensfusion6UpdateQ(float gx, float gy, float gz, float ax, float ay, float 
 // Date     Author          Notes
 // 29/09/2011 SOH Madgwick    Initial release
 // 02/10/2011 SOH Madgwick  Optimised for reduced CPU load
-static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float dt)
+static void sensfusion9UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float dt)
 {
   float recipNorm;
   float s0, s1, s2, s3;
@@ -180,58 +180,78 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
 // Date     Author      Notes
 // 29/09/2011 SOH Madgwick    Initial release
 // 02/10/2011 SOH Madgwick  Optimised for reduced CPU load
-static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float dt)
+static void sensfusion9UpdateQImpl(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt)
 {  
   float recipNorm;
   float halfvx, halfvy, halfvz;
+  float halfwx, halfwy, halfwz;
   float halfex, halfey, halfez;
   float qa, qb, qc;
 
+  // Convert gyroscope degrees/sec to radians/sec
   gx = gx * M_PI_F / 180;
   gy = gy * M_PI_F / 180;
   gz = gz * M_PI_F / 180;
 
-  // Compute feedback only if accelerometer measurement valid (avoids NaN in accelerometer normalisation)
-  if(!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f)))
+  // Normalize accelerometer measurement
+  if (!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f)))
   {
-    // Normalise accelerometer measurement
     recipNorm = invSqrt(ax * ax + ay * ay + az * az);
     ax *= recipNorm;
     ay *= recipNorm;
     az *= recipNorm;
-
-    // Estimated direction of gravity and vector perpendicular to magnetic flux
-    halfvx = qx * qz - qw * qy;
-    halfvy = qw * qx + qy * qz;
-    halfvz = qw * qw - 0.5f + qz * qz;
-
-    // Error is sum of cross product between estimated and measured direction of gravity
-    halfex = (ay * halfvz - az * halfvy);
-    halfey = (az * halfvx - ax * halfvz);
-    halfez = (ax * halfvy - ay * halfvx);
-
-    // Compute and apply integral feedback if enabled
-    if(twoKi > 0.0f)
-    {
-      integralFBx += twoKi * halfex * dt;  // integral error scaled by Ki
-      integralFBy += twoKi * halfey * dt;
-      integralFBz += twoKi * halfez * dt;
-      gx += integralFBx;  // apply integral feedback
-      gy += integralFBy;
-      gz += integralFBz;
-    }
-    else
-    {
-      integralFBx = 0.0f; // prevent integral windup
-      integralFBy = 0.0f;
-      integralFBz = 0.0f;
-    }
-
-    // Apply proportional feedback
-    gx += twoKp * halfex;
-    gy += twoKp * halfey;
-    gz += twoKp * halfez;
   }
+
+  // Normalize magnetometer measurement
+  if (!((mx == 0.0f) && (my == 0.0f) && (mz == 0.0f)))
+  {
+    recipNorm = invSqrt(mx * mx + my * my + mz * mz);
+    mx *= recipNorm;
+    my *= recipNorm;
+    mz *= recipNorm;
+  }
+
+  // Reference direction of Earth's magnetic field
+  float hx = 2.0f * mx * (0.5f - qy * qy - qz * qz) + 2.0f * my * (qx * qy - qw * qz) + 2.0f * mz * (qx * qz + qw * qy);
+  float hy = 2.0f * mx * (qx * qy + qw * qz) + 2.0f * my * (0.5f - qx * qx - qz * qz) + 2.0f * mz * (qy * qz - qw * qx);
+  float hz = 2.0f * mx * (qx * qz - qw * qy) + 2.0f * my * (qy * qz + qw * qx) + 2.0f * mz * (0.5f - qx * qx - qy * qy);
+  float bx = sqrt((hx * hx) + (hy * hy));
+  float bz = hz;
+
+  // Estimated direction of gravity and magnetic flux
+  halfvx = qx * qz - qw * qy;
+  halfvy = qw * qx + qy * qz;
+  halfvz = qw * qw - 0.5f + qz * qz;
+  halfwx = bx * (0.5f - qy * qy - qz * qz) + bz * (qx * qz - qw * qy);
+  halfwy = bx * (qx * qy - qw * qz) + bz * (qw * qx + qy * qz);
+  halfwz = bx * (qw * qy + qx * qz) + bz * (0.5f - qx * qx - qy * qy);
+
+  // Error is sum of cross product between estimated and measured direction of gravity and magnetic flux
+  halfex = (ay * halfvz - az * halfvy) + (my * halfwz - mz * halfwy);
+  halfey = (az * halfvx - ax * halfvz) + (mz * halfwx - mx * halfwz);
+  halfez = (ax * halfvy - ay * halfvx) + (mx * halfwy - my * halfwx);
+
+  // Compute and apply integral feedback if enabled
+  if (twoKi > 0.0f)
+  {
+    integralFBx += twoKi * halfex * dt;  // integral error scaled by Ki
+    integralFBy += twoKi * halfey * dt;
+    integralFBz += twoKi * halfez * dt;
+    gx += integralFBx;  // apply integral feedback
+    gy += integralFBy;
+    gz += integralFBz;
+  }
+  else
+  {
+    integralFBx = 0.0f;  // prevent integral windup
+    integralFBy = 0.0f;
+    integralFBz = 0.0f;
+  }
+
+  // Apply proportional feedback
+  gx += twoKp * halfex;
+  gy += twoKp * halfey;
+  gz += twoKp * halfez;
 
   // Integrate rate of change of quaternion
   gx *= (0.5f * dt);   // pre-multiply common factors
@@ -245,16 +265,17 @@ static void sensfusion6UpdateQImpl(float gx, float gy, float gz, float ax, float
   qy += (qa * gy - qb * gz + qz * gx);
   qz += (qa * gz + qb * gy - qc * gx);
 
-  // Normalise quaternion
+  // Normalize quaternion
   recipNorm = invSqrt(qw * qw + qx * qx + qy * qy + qz * qz);
   qw *= recipNorm;
   qx *= recipNorm;
   qy *= recipNorm;
   qz *= recipNorm;
 }
+
 #endif
 
-void sensfusion6GetQuaternion(float* q_x, float* q_y, float* q_z, float* q_w)
+void sensfusion9GetQuaternion(float* q_x, float* q_y, float* q_z, float* q_w)
 {
   *q_x = qx;
   *q_y = qy;
@@ -262,7 +283,7 @@ void sensfusion6GetQuaternion(float* q_x, float* q_y, float* q_z, float* q_w)
   *q_w = qw;
 }
 
-void sensfusion6GetEulerRPY(float* roll, float* pitch, float* yaw)
+void sensfusion9GetEulerRPY(float* roll, float* pitch, float* yaw)
 {
   float gx = gravX;
   float gy = gravY;
@@ -276,12 +297,12 @@ void sensfusion6GetEulerRPY(float* roll, float* pitch, float* yaw)
   *roll = atan2f(gy, gz) * 180 / M_PI_F;
 }
 
-float sensfusion6GetAccZWithoutGravity(const float ax, const float ay, const float az)
+float sensfusion9GetAccZWithoutGravity(const float ax, const float ay, const float az)
 {
-  return sensfusion6GetAccZ(ax, ay, az) - baseZacc;
+  return sensfusion9GetAccZ(ax, ay, az) - baseZacc;
 }
 
-float sensfusion6GetInvThrustCompensationForTilt()
+float sensfusion9GetInvThrustCompensationForTilt()
 {
   // Return the z component of the estimated gravity direction
   // (0, 0, 1) dot G
@@ -302,7 +323,7 @@ float invSqrt(float x)
   return y;
 }
 
-static float sensfusion6GetAccZ(const float ax, const float ay, const float az)
+static float sensfusion9GetAccZ(const float ax, const float ay, const float az)
 {
   // return vertical acceleration
   // (A dot G) / |G|,  (|G| = 1) -> (A dot G)

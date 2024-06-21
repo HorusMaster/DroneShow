@@ -44,6 +44,8 @@
         "sensors_icm_20948_bmp_280.h": "c",
         "sensors.h": "c",
         "stabilizer.h": "c",
-        "position_estimator.h": "c"
+        "position_estimator.h": "c",
+        "sensfusion6.h": "c",
+        "sensfusion9.h": "c"
     },
 }

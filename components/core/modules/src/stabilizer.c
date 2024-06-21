@@ -22,21 +22,20 @@ static void stabilizerTask(void *param)
   uint32_t tick;
   tick = 1;
   while (1)
-  {    
+  {
     sensorsWaitDataReady();
-    //sensorsAcquire(&sensorData, tick);    
-    stateEstimator(&state, &sensorData, &control, tick); 
-    ESP_LOGI(TAG, "State: %f %f %f", state.attitude.pitch, state.attitude.roll, state.attitude.yaw);       
+    // sensorsAcquire(&sensorData, tick);
+    stateEstimator(&state, &sensorData, &control, tick);
+    ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state.attitude.roll, state.attitude.pitch, state.attitude.yaw);
     tick++;
-    vTaskDelay(M2T(200));
+    vTaskDelay(M2T(50));
   }
 }
 
 void stabilizerInit(StateEstimatorType estimator)
 {
-  if(isInit)
+  if (isInit)
     return;
-
 
   stateEstimatorInit(estimator);
 

@@ -25,8 +25,6 @@
  * estimator_complementary.c - a complementary estimator
  */
 
-
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "stabilizer.h"
@@ -41,18 +39,17 @@
 static const char *TAG = "estimator_complementary";
 
 #define ATTITUDE_UPDATE_RATE RATE_250_HZ
-#define ATTITUDE_UPDATE_DT 1.0/ATTITUDE_UPDATE_RATE
+#define ATTITUDE_UPDATE_DT 1.0 / ATTITUDE_UPDATE_RATE
 
 #define POS_UPDATE_RATE RATE_100_HZ
-#define POS_UPDATE_DT 1.0/POS_UPDATE_RATE
+#define POS_UPDATE_DT 1.0 / POS_UPDATE_RATE
 
-static bool latestTofMeasurement(tofMeasurement_t* tofMeasurement);
+static bool latestTofMeasurement(tofMeasurement_t *tofMeasurement);
 
 // Measurements of TOF from laser sensor
 #define TOF_QUEUE_LENGTH (1)
 static QueueHandle_t tofDataQueue;
 STATIC_MEM_QUEUE_ALLOC(tofDataQueue, TOF_QUEUE_LENGTH, sizeof(tofMeasurement_t));
-
 
 void estimatorComplementaryInit(void)
 {
@@ -70,28 +67,25 @@ bool estimatorComplementaryTest(void)
 }
 
 void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t *control, const uint32_t tick)
-{   
- 
+{
+
   sensorsAcquire(sensorData, tick); // Read sensors at full rate (1000Hz)
-  //ESP_LOGI(TAG, "Gyro: %f %f %f", sensorData->gyro.x, sensorData->gyro.y, sensorData->gyro.z);
-  // ESP_LOGI(TAG, "Acc: %f %f %f", sensorData->acc.x, sensorData->acc.y, sensorData->acc.z);
-  //ESP_LOGI(TAG, "Mag: %f %f %f", sensorData->mag.x, sensorData->mag.y, sensorData->mag.z);
-  // ESP_LOGI(TAG, "Baro: %f, Altitud:%f", sensorData->baro.pressure, sensorData->baro.asl);
-  if (RATE_DO_EXECUTE(ATTITUDE_UPDATE_RATE, tick)) {
+  if (RATE_DO_EXECUTE(ATTITUDE_UPDATE_RATE, tick))
+  {
     sensfusion6UpdateQ(sensorData->gyro.x, sensorData->gyro.y, sensorData->gyro.z,
                        sensorData->acc.x, sensorData->acc.y, sensorData->acc.z,
                        ATTITUDE_UPDATE_DT);
 
     // Save attitude, adjusted for the legacy CF2 body coordinate system
     sensfusion6GetEulerRPY(&state->attitude.roll, &state->attitude.pitch, &state->attitude.yaw);
-    //ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state->attitude.roll, state->attitude.pitch, state->attitude.yaw);
-    // Save quaternion, hopefully one day this could be used in a better controller.
-    // Note that this is not adjusted for the legacy coordinate system
+    // ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state->attitude.roll, state->attitude.pitch, state->attitude.yaw);
+    //  Save quaternion, hopefully one day this could be used in a better controller.
+    //  Note that this is not adjusted for the legacy coordinate system
     sensfusion6GetQuaternion(
-      &state->attitudeQuaternion.x,
-      &state->attitudeQuaternion.y,
-      &state->attitudeQuaternion.z,
-      &state->attitudeQuaternion.w);
+        &state->attitudeQuaternion.x,
+        &state->attitudeQuaternion.y,
+        &state->attitudeQuaternion.z,
+        &state->attitudeQuaternion.w);
 
     state->acc.z = sensfusion6GetAccZWithoutGravity(sensorData->acc.x,
                                                     sensorData->acc.y,
@@ -100,7 +94,8 @@ void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t 
     positionUpdateVelocity(state->acc.z, ATTITUDE_UPDATE_DT);
   }
 
-  if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick)) {
+  if (RATE_DO_EXECUTE(POS_UPDATE_RATE, tick))
+  {
     tofMeasurement_t tofMeasurement;
 
     latestTofMeasurement(&tofMeasurement);
@@ -108,28 +103,31 @@ void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t 
   }
 }
 
-static bool latestTofMeasurement(tofMeasurement_t* tofMeasurement) {
+static bool latestTofMeasurement(tofMeasurement_t *tofMeasurement)
+{
   return xQueuePeek(tofDataQueue, tofMeasurement, 0) == pdTRUE;
 }
 
 static bool overwriteMeasurement(QueueHandle_t queue, void *measurement)
 {
   portBASE_TYPE result;
-  bool isInInterrupt = false;//(SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0;
+  bool isInInterrupt = false; //(SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) != 0;
 
-  if (isInInterrupt) {
+  if (isInInterrupt)
+  {
     portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
     result = xQueueOverwriteFromISR(queue, measurement, &xHigherPriorityTaskWoken);
-    if(xHigherPriorityTaskWoken == pdTRUE)
+    if (xHigherPriorityTaskWoken == pdTRUE)
     {
       portYIELD();
     }
-  } else {
+  }
+  else
+  {
     result = xQueueOverwrite(queue, measurement);
   }
-  return (result==pdTRUE);
+  return (result == pdTRUE);
 }
-
 
 bool estimatorComplementaryEnqueueTOF(const tofMeasurement_t *tof)
 {
