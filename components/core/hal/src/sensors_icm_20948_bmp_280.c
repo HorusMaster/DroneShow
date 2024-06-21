@@ -27,7 +27,11 @@ STATIC_MEM_QUEUE_ALLOC(barometerDataQueue, 1, sizeof(baro_t));
 
 STATIC_MEM_TASK_ALLOC(sensorsTask, SENSORS_TASK_STACKSIZE);
 
+static SemaphoreHandle_t sensorsDataReady;
+static SemaphoreHandle_t dataReady;
+
 static sensorData_t sensorData;
+static volatile uint64_t imuIntTimestamp;
 
 static void i2c_master_init(void)
 {
@@ -103,7 +107,7 @@ void sensorsICM20948BMP280Acquire(sensorData_t *sensors, const uint32_t tick)
     sensorsReadAcc(&sensors->acc);
     sensorsReadMag(&sensors->mag);
     sensorsReadBaro(&sensors->baro);
-    // sensors->interruptTimestamp = sensorData.interruptTimestamp;
+    sensors->interruptTimestamp = sensorData.interruptTimestamp;
 }
 
 static void sensorsTask(void *arg)
@@ -119,40 +123,56 @@ static void sensorsTask(void *arg)
     while (1)
     {
         imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
-        
-        processSensorData(&stGyroRawData, &stAccelRawData);
-        pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
-
-        if (isMagnetometerPresent)
-        {
-            processMagnetometerMeasurements(&stMagnRawData);
-        }
-
-        if (isBarometerPresent)
-        {
-            processBarometerMeasurements(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
-        }
-
-        /* sensors step 3- queue sensors data  on the output queues */
-        xQueueOverwrite(accelerometerDataQueue, &sensorData.acc);
-        xQueueOverwrite(gyroDataQueue, &sensorData.gyro);
-
-        if (isMagnetometerPresent)
-        {
-            xQueueOverwrite(magnetometerDataQueue, &sensorData.mag);
-        }
-
-        if (isBarometerPresent)
-        {
-            xQueueOverwrite(barometerDataQueue, &sensorData.baro);
-        }
-#ifdef DEBUG_EP2
         ESP_LOGI(TAG, "Pitch: %f, Roll: %f, Yaw: %f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw);
-        ESP_LOGI(TAG, "Temperature: %f, Pressure: %f, Altitude: %f", sensorData.baro.temperature, sensorData.baro.pressure, sensorData.baro.asl);
-#endif
+        if (pdTRUE == xSemaphoreTake(sensorsDataReady, portMAX_DELAY))
+        {
+            sensorData.interruptTimestamp = imuIntTimestamp;
 
+            // ESP_LOGI(TAG, "Timestamp: %llu", sensorData.interruptTimestamp);
+
+            imuDataGet(&stAngles, &stGyroRawData, &stAccelRawData, &stMagnRawData);
+            ESP_LOGI(TAG, "Pitch: %f, Roll: %f, Yaw: %f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw);
+
+            processSensorData(&stGyroRawData, &stAccelRawData);
+            pressSensorDataGet(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
+
+            if (isMagnetometerPresent)
+            {
+                processMagnetometerMeasurements(&stMagnRawData);
+            }
+
+            if (isBarometerPresent)
+            {
+                processBarometerMeasurements(&s32TemperatureVal, &s32PressureVal, &s32AltitudeVal);
+            }
+
+            /* sensors step 3- queue sensors data  on the output queues */
+            xQueueOverwrite(accelerometerDataQueue, &sensorData.acc);
+            xQueueOverwrite(gyroDataQueue, &sensorData.gyro);
+
+            if (isMagnetometerPresent)
+            {
+                xQueueOverwrite(magnetometerDataQueue, &sensorData.mag);
+            }
+
+            if (isBarometerPresent)
+            {
+                xQueueOverwrite(barometerDataQueue, &sensorData.baro);
+            }
+#ifdef DEBUG_EP2
+            ESP_LOGI(TAG, "Pitch: %f, Roll: %f, Yaw: %f", stAngles.fPitch, stAngles.fRoll, stAngles.fYaw);
+            ESP_LOGI(TAG, "Temperature: %f, Pressure: %f, Altitude: %f", sensorData.baro.temperature, sensorData.baro.pressure, sensorData.baro.asl);
+#endif
+        }
         vTaskDelay(M2T(500));
     }
+}
+
+void trigger_interrupt()
+{
+    gpio_set_level(GPIO_OUT_PIN, 1);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    gpio_set_level(GPIO_OUT_PIN, 0);
 }
 
 static void sensorsTaskInit(void)
@@ -163,7 +183,38 @@ static void sensorsTaskInit(void)
     barometerDataQueue = STATIC_MEM_QUEUE_CREATE(barometerDataQueue);
 
     STATIC_MEM_TASK_CREATE(sensorsTask, sensorsTask, SENSORS_TASK_NAME, NULL, SENSORS_TASK_PRI);
+    // STATIC_MEM_TASK_CREATE(interruptTask, interruptTask, "InterruptTask", NULL, SENSORS_TASK_PRI);
     ESP_LOGI(TAG, "sensorsTask created");
+}
+
+static void IRAM_ATTR sensors_inta_isr_handler(void *arg)
+{
+    portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+    imuIntTimestamp = usecTimestamp(); // Esta función devuelve el número de microsegundos desde que se inicializó el esp_timer
+    xSemaphoreGiveFromISR(sensorsDataReady, &xHigherPriorityTaskWoken);
+
+    if (xHigherPriorityTaskWoken)
+    {
+        portYIELD_FROM_ISR();
+    }
+}
+
+static void sensorsInterruptInit(void)
+{
+    ESP_LOGI(TAG, "sensorsInterruptInit");
+    gpio_config_t io_conf = {
+        .intr_type = GPIO_INTR_POSEDGE,
+        .pin_bit_mask = (1ULL << GPIO_INTA_ICM20948_IO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_down_en = 0,
+        .pull_up_en = 1,
+    };
+    sensorsDataReady = xSemaphoreCreateBinary();
+    dataReady = xSemaphoreCreateBinary();
+    gpio_config(&io_conf);
+    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
+    gpio_isr_handler_add(GPIO_INTA_ICM20948_IO, sensors_inta_isr_handler, (void *)GPIO_INTA_ICM20948_IO);
+    ESP_LOGI(TAG, "sensorsInterruptInit done");
 }
 
 void sensorsICM20948BMP280Init(void)
@@ -174,6 +225,7 @@ void sensorsICM20948BMP280Init(void)
     }
 
     sensorsDeviceInit();
+    sensorsInterruptInit();
     sensorsTaskInit();
     isInit = true;
 }

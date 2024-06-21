@@ -286,13 +286,13 @@ float invSqrt(float x)
 void icm20948init(void)
 {
   bool bRet = false;
-  /* user bank 0 register */
+  /* Configuración inicial del sensor user bank 0 register  */
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_PWR_MIGMT_1, REG_VAL_ALL_RGE_RESET);
   vTaskDelay(10 / portTICK_PERIOD_MS);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_PWR_MIGMT_1, REG_VAL_RUN_MODE);
-
-  /* user bank 2 register */
+    
+  /* Configuración del giroscopio y acelerómetro user bank 2 register */
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_2);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_GYRO_SMPLRT_DIV, 0x07);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_GYRO_CONFIG_1,
@@ -301,7 +301,7 @@ void icm20948init(void)
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_ACCEL_CONFIG,
                  REG_VAL_BIT_ACCEL_DLPCFG_6 | REG_VAL_BIT_ACCEL_FS_2g | REG_VAL_BIT_ACCEL_DLPF);
 
-  /* user bank 0 register */
+  /* Regresar al banco de registro 0  user bank 0 register */
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0);
 
   vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -312,7 +312,7 @@ void icm20948init(void)
   bRet = icm20948MagCheck();
   if (bRet == true)
   {
-    ESP_LOGI(TAG, "Magnetometer Found");
+    ESP_LOGI(TAG, "Magnetometer is AK09916");
     // Configuración del magnetómetro para modo de operación a 20Hz
     icm20948WriteSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_WRITE,
                            REG_ADD_MAG_CNTL2, REG_VAL_MAG_MODE_20HZ);
@@ -321,8 +321,28 @@ void icm20948init(void)
   {
     ESP_LOGI(TAG, "Magnetometer is NULL");
   }
+
+  /* Configuración de interrupciones */
+  uint8_t int_pin_cfg = 0x00; // Nivel alto activo, interrupción en nivel, drenaje abierto, latch deshabilitado
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_INT_PIN_CFG, int_pin_cfg);
+
+  uint8_t int_enable = 0x00; // Inicialmente sin interrupciones
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE, int_enable);
+
+  uint8_t int_enable_1 = 0x01; // Habilitar interrupción de datos listos
+  i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE_1, int_enable_1);
+
+  uint8_t int_pin_cfg_r = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_INT_PIN_CFG);
+  uint8_t int_enable_r = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE);
+  uint8_t int_enable_1_r = i2c_read_byte(I2C_ADD_ICM20948, REG_ADD_INT_ENABLE_1);
+
+  ESP_LOGI(TAG, "REG_ADD_INT_PIN_CFG: 0x%02X", int_pin_cfg_r);
+  ESP_LOGI(TAG, "REG_ADD_INT_ENABLE: 0x%02X", int_enable_r);
+  ESP_LOGI(TAG, "REG_ADD_INT_ENABLE_1: 0x%02X", int_enable_1_r);
+
   return;
 }
+
 
 bool icm20948Check(void)
 {
@@ -579,25 +599,17 @@ void icm20948GyroOffset(void)
 bool icm20948MagCheck(void)
 {
   bool bRet = false;
-  uint8_t u8Ret[2];
-
-  ESP_LOGI(TAG, "Checking magnetometer...");
+  uint8_t u8Ret[2];  
 
   // Leer los registros de identificación del magnetómetro
   icm20948ReadSecondary(I2C_ADD_ICM20948_AK09916 | I2C_ADD_ICM20948_AK09916_READ,
                         REG_ADD_MAG_WIA1, 2, u8Ret);
 
   // Verificar los valores leídos con los valores esperados
-  if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2))
+  if ((u8Ret[0] == REG_VAL_MAG_WIA1) && (u8Ret[1] == REG_VAL_MAG_WIA2)) 
   {
     bRet = true;
-    ESP_LOGI(TAG, "Magnetometer check passed.");
   }
-  else
-  {
-    ESP_LOGE(TAG, "Magnetometer check failed.");
-  }
-
   return bRet;
 }
 

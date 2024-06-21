@@ -34,7 +34,7 @@ void systemInit(void)
   canStartMutex = xSemaphoreCreateMutexStatic(&canStartMutexBuffer);
   xSemaphoreTake(canStartMutex, portMAX_DELAY);
 
-  init_wifi();
+  //init_wifi();
 
   isInit = true;
 }

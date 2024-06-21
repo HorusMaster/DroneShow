@@ -48,6 +48,20 @@
 #define REG_VAL_REG_BANK_2 0x20
 #define REG_VAL_REG_BANK_3 0x30
 
+/* Define ICM-20948 Int */
+/* User bank 0 register */
+#define REG_ADD_INT_PIN_CFG 0x0F
+#define REG_ADD_INT_ENABLE 0x10
+#define REG_ADD_INT_ENABLE_1 0x11
+#define REG_VAL_INT_PIN_CFG 0x30 // Nivel alto activo, interrupción en nivel
+#define REG_VAL_INT_ENABLE 0x01 // Habilitar interrupción de datos listos
+#define GPIO_INTA_ICM20948_IO 4
+#define GPIO_OUT_PIN 5
+#define ESP_INTR_FLAG_DEFAULT 0
+
+
+
+
 /* User bank 1 register */
 /* User bank 2 register */
 #define REG_ADD_GYRO_SMPLRT_DIV 0x00

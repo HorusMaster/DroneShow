@@ -84,7 +84,7 @@ void estimatorComplementary(state_t *state, sensorData_t *sensorData, control_t 
 
     // Save attitude, adjusted for the legacy CF2 body coordinate system
     sensfusion6GetEulerRPY(&state->attitude.roll, &state->attitude.pitch, &state->attitude.yaw);
-    ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state->attitude.roll, state->attitude.pitch, state->attitude.yaw);
+    //ESP_LOGI(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state->attitude.roll, state->attitude.pitch, state->attitude.yaw);
     // Save quaternion, hopefully one day this could be used in a better controller.
     // Note that this is not adjusted for the legacy coordinate system
     sensfusion6GetQuaternion(
