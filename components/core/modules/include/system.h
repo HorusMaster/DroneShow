@@ -2,6 +2,8 @@
 #define __SYSTEM_H__
 
 void systemLaunch(void);
+void systemStart();
+void systemWaitStart(void);
 
 
 #endif //__SYSTEM_H__

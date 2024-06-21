@@ -9,6 +9,7 @@
 #include "estimator_kalman.h"
 #include "stm32_legacy.h"
 #include "sensors.h"
+#include "stabilizer.h"
 
 static bool isInit;
 SemaphoreHandle_t canStartMutex;
@@ -42,9 +43,9 @@ void systemTask(void *arg)
 { 
   systemInit();  
   sensorsInit();
-  // StateEstimatorType estimator = anyEstimator;
-  // estimatorKalmanTaskInit();
-  // stabilizerInit(estimator);
+  StateEstimatorType estimator = anyEstimator;
+  //estimatorKalmanTaskInit();
+  stabilizerInit(estimator);
 
   {
     while (1)
@@ -52,4 +53,24 @@ void systemTask(void *arg)
       vTaskDelay(M2T(500));
     }
   }
+}
+
+/* Global system variables */
+void systemStart()
+{
+  xSemaphoreGive(canStartMutex);
+#ifndef DEBUG_EP2
+  //watchdogInit();
+#endif
+}
+
+void systemWaitStart(void)
+{
+  //This permits to guarantee that the system task is initialized before other
+  //tasks waits for the start event.
+  while(!isInit)
+    vTaskDelay(2);
+
+  xSemaphoreTake(canStartMutex, portMAX_DELAY);
+  xSemaphoreGive(canStartMutex);
 }

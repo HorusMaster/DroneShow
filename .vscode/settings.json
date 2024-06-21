@@ -41,6 +41,9 @@
         "math.h": "c",
         "stm32_legacy.h": "c",
         "platform.h": "c",
-        "sensors_icm_20948_bmp_280.h": "c"
-    }
+        "sensors_icm_20948_bmp_280.h": "c",
+        "sensors.h": "c",
+        "stabilizer.h": "c",
+        "position_estimator.h": "c"
+    },
 }
