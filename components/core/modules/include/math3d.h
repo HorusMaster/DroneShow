@@ -54,17 +54,29 @@ static inline float clamp(float value, float min, float max) {
 // consecutive bit representations" property. Argument `ulps` is the number of
 // steps to allow. this does not work well for numbers near zero.
 // See https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+// static inline bool fcloseulps(float a, float b, int ulps) {
+// 	if ((a < 0.0f) != (b < 0.0f)) {
+// 		// Handle negative zero.
+// 		if (a == b) {
+// 			return true;
+// 		}
+// 		return false;
+// 	}
+// 	int ia = *((int *)&a);
+// 	int ib = *((int *)&b);
+// 	return fabsf(ia - ib) <= ulps;
+// }
 static inline bool fcloseulps(float a, float b, int ulps) {
-	if ((a < 0.0f) != (b < 0.0f)) {
-		// Handle negative zero.
-		if (a == b) {
-			return true;
-		}
-		return false;
-	}
-	int ia = *((int *)&a);
-	int ib = *((int *)&b);
-	return fabsf(ia - ib) <= ulps;
+    if ((a < 0.0f) != (b < 0.0f)) {
+        // Handle negative zero.
+        if (a == b) {
+            return true;
+        }
+        return false;
+    }
+    int ia = *((int *)&a);
+    int ib = *((int *)&b);
+    return abs(ia - ib) <= ulps;  // Usa abs para enteros
 }
 
 

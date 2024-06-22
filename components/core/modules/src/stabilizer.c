@@ -52,7 +52,8 @@ static void stabilizerTask(void *param)
     // sensorsAcquire(&sensorData, tick);
     stateEstimator(&state, &sensorData, &control, tick);
     commanderGetSetpoint(&setpoint, &state);
-    controller(&control, &setpoint, &sensorData, &state, tick);   
+    controller(&control, &setpoint, &sensorData, &state, tick);
+    //ESP_LOGI(TAG, "Control: %i %i %i %f", control.roll, control.pitch, control.yaw, control.thrust);
     tick++;
     if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount()))
     {

@@ -50,6 +50,7 @@
         "task.h": "c",
         "ratesupervisor.h": "c",
         "controller_pid.h": "c",
-        "stabilizer_types.h": "c"
+        "stabilizer_types.h": "c",
+        "position_controller.h": "c"
     },
 }

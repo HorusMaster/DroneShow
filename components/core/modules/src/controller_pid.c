@@ -6,7 +6,7 @@
 #include "sensfusion6.h"
 #include "position_controller.h"
 #include "controller_pid.h"
-
+#include "esp_log.h"
 // #include "log.h"
 // #include "debug_cf.h"
 // #include "param.h"
@@ -14,6 +14,7 @@
 
 #define ATTITUDE_UPDATE_DT    (float)(1.0f/ATTITUDE_RATE)
 
+static const char *TAG = "ControllerPid";
 static bool tiltCompensationEnabled = false;
 
 static attitude_t attitudeDesired;
@@ -59,6 +60,7 @@ static float capAngle(float angle) {
   return result;
 }
 
+
 void controllerPid(control_t *control, setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
@@ -75,7 +77,7 @@ void controllerPid(control_t *control, setpoint_t *setpoint,
     attitudeDesired.yaw = capAngle(attitudeDesired.yaw);
   }
 
-  if (RATE_DO_EXECUTE(POSITION_RATE, tick)) {
+  if (RATE_DO_EXECUTE(POSITION_RATE, tick)) {    
     positionController(&actuatorThrust, &attitudeDesired, setpoint, state);
   }
 
