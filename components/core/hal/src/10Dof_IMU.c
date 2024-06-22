@@ -88,34 +88,34 @@ uint8_t i2c_read_byte(uint8_t dev_addr, uint8_t reg_addr)
 }
 
 #define I2C_CHECK(a, str, ret_val) if (!(a)) { \
-        ESP_LOGE("I2C", "%s:%d (%s): %s", __FILE__, __LINE__, __FUNCTION__, str); \
+        ESP_LOGE(TAG, "%s:%d (%s): %s", __FILE__, __LINE__, __FUNCTION__, str); \
         return ret_val; \
     }
 
 void i2c_write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
 {
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    esp_err_t ret;
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  esp_err_t ret;
 
-    ret = i2c_master_start(cmd);
-    I2C_CHECK(ret == ESP_OK, "i2c_master_start failed", );
+  ret = i2c_master_start(cmd);
+  I2C_CHECK(ret == ESP_OK, "i2c_master_start failed", );
 
-    ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
-    I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (address) failed", i2c_cmd_link_delete(cmd); return;);
+  ret = i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
+  I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (address) failed", i2c_cmd_link_delete(cmd); return;);
 
-    ret = i2c_master_write_byte(cmd, reg_addr, true);
-    I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (register) failed", i2c_cmd_link_delete(cmd); return;);
+  ret = i2c_master_write_byte(cmd, reg_addr, true);
+  I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (register) failed", i2c_cmd_link_delete(cmd); return;);
 
-    ret = i2c_master_write_byte(cmd, data, true);
-    I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (data) failed", i2c_cmd_link_delete(cmd); return;);
+  ret = i2c_master_write_byte(cmd, data, true);
+  I2C_CHECK(ret == ESP_OK, "i2c_master_write_byte (data) failed", i2c_cmd_link_delete(cmd); return;);
 
-    ret = i2c_master_stop(cmd);
-    I2C_CHECK(ret == ESP_OK, "i2c_master_stop failed", i2c_cmd_link_delete(cmd); return;);
+  ret = i2c_master_stop(cmd);
+  I2C_CHECK(ret == ESP_OK, "i2c_master_stop failed", i2c_cmd_link_delete(cmd); return;);
 
-    ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_PERIOD_MS);
-    I2C_CHECK(ret == ESP_OK, "i2c_master_cmd_begin failed", i2c_cmd_link_delete(cmd); return;);
+  ret = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_PERIOD_MS);
+  I2C_CHECK(ret == ESP_OK, "i2c_master_cmd_begin failed", i2c_cmd_link_delete(cmd); return;);
 
-    i2c_cmd_link_delete(cmd);
+  i2c_cmd_link_delete(cmd);
 }
 /******************************************************************************
  * IMU module                                                                 *
