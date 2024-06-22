@@ -10,13 +10,19 @@
 #include "system.h"
 #include "mqtt_module.h"
 #include "rateSupervisor.h"
+#include "commander.h"
+#include "controller.h"
 
 static const char *TAG = "stabilizer";
 static bool isInit;
 
 static state_t state;
 static sensorData_t sensorData;
+static setpoint_t setpoint;
 static control_t control;
+
+static const char *estimatorType;
+static const char *controllerType;
 // Se debe de incluir FREERTOS para el error de unknown type name 'StackType_t'
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 STATIC_MEM_TASK_ALLOC(mqttTask, STABILIZER_TASK_STACKSIZE);
@@ -28,7 +34,7 @@ static void mqttTask(void *param)
 {
   while (1)
   {
-    send_message(&state);
+    send_message(&state, &control);
     vTaskDelay(M2T(100));
   }
 }
@@ -45,7 +51,8 @@ static void stabilizerTask(void *param)
     sensorsWaitDataReady();
     // sensorsAcquire(&sensorData, tick);
     stateEstimator(&state, &sensorData, &control, tick);
-    //(TAG, "Roll: %f, Pitch: %f, Yaw: %f", state.attitude.roll, state.attitude.pitch, state.attitude.yaw);
+    commanderGetSetpoint(&setpoint, &state);
+    controller(&control, &setpoint, &sensorData, &state, tick);   
     tick++;
     if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount()))
     {
@@ -55,6 +62,7 @@ static void stabilizerTask(void *param)
         rateWarningDisplayed = true;
       }
     }
+    vTaskDelay(M2T(20));
   }
 }
 
@@ -64,7 +72,12 @@ void stabilizerInit(StateEstimatorType estimator)
     return;
 
   stateEstimatorInit(estimator);
+  controllerInit(ControllerTypeAny);
+  
+  estimatorType = stateEstimatorGetName();
+  controllerType = controllerGetName();
 
+  ESP_LOGI(TAG, "Stabilizer initialized with estimator %s and controller %s", estimatorType, controllerType);
   STATIC_MEM_TASK_CREATE(stabilizerTask, stabilizerTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
   STATIC_MEM_TASK_CREATE(mqttTask, mqttTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
 

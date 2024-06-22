@@ -46,6 +46,10 @@
         "stabilizer.h": "c",
         "position_estimator.h": "c",
         "sensfusion6.h": "c",
-        "sensfusion9.h": "c"
+        "sensfusion9.h": "c",
+        "task.h": "c",
+        "ratesupervisor.h": "c",
+        "controller_pid.h": "c",
+        "stabilizer_types.h": "c"
     },
 }

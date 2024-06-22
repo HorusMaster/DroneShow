@@ -36,7 +36,7 @@
 #include "static_mem.h"
 #include "esp_log.h"
 
-static const char *TAG = "estimator_complementary";
+// static const char *TAG = "estimator_complementary";
 
 #define ATTITUDE_UPDATE_RATE RATE_250_HZ
 #define ATTITUDE_UPDATE_DT 1.0 / ATTITUDE_UPDATE_RATE

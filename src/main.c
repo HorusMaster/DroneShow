@@ -139,7 +139,8 @@ void mqtt_task(void *pvParameters)
                  tmd.pitch, tmd.roll, tmd.yaw, tmd.altitude,
                  tmd.motor1, tmd.motor2, tmd.motor3, tmd.motor4,
                  tmd.pidpitch, tmd.pidroll, tmd.pidyaw, tmd.pidalt);
-        send_message(message);
+
+        //send_message(message);
         
         vTaskDelay(pdMS_TO_TICKS(200)); // Delay de 1000 ms (1 segundo) para el envío de mensajes MQTT
     }

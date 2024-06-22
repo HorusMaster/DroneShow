@@ -11,6 +11,7 @@
 #include "sensors.h"
 #include "stabilizer.h"
 #include "mqtt_module.h"
+#include "commander.h"
 
 static bool isInit;
 SemaphoreHandle_t canStartMutex;
@@ -44,6 +45,7 @@ void systemInit(void)
 void systemTask(void *arg)
 { 
   systemInit();  
+  commanderInit();
   sensorsInit();
   StateEstimatorType estimator = anyEstimator;
   //estimatorKalmanTaskInit();

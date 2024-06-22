@@ -30,7 +30,7 @@
 #include "physicalConstants.h"
 #include "esp_log.h"
 
-static const char *TAG = "sensfusion9";
+// static const char *TAG = "sensfusion9";
 
 //#define MADWICK_QUATERNION_IMU
 
