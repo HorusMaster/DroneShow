@@ -129,12 +129,11 @@ void commanderGetSetpoint(setpoint_t *setpoint, const state_t *state)
     setpoint->attitudeRate.yaw = 0;    
     // Keep Z as it is 
   }
-   // Actualiza la posición Z y el modo si el setpoint es reciente
-  if ((currentTime - setpoint->timestamp) <= COMMANDER_WDT_TIMEOUT_SHUTDOWN) {
-    // Ejemplo de actualización del setpoint directamente
-    setpoint->position.z = 1.0f;  // Elevar un metro
-    setpoint->mode.z = modeAbs;  // Asegurar que el modo Z esté en modo de posición
-  }
+   // Actualiza la posición Z y el modo si el setpoint es reciente  
+   // ELIMINAR LAS SIGUIENTES LINEAS    
+  setpoint->position.z = 1.0f;  // Elevar un metro
+  setpoint->mode.z = modeAbs;  // Asegurar que el modo Z esté en modo de posición
+  
 
   // Log para depuración
   // printf("Setpoint position.z: %f\n", setpoint->position.z);

@@ -51,6 +51,7 @@
         "ratesupervisor.h": "c",
         "controller_pid.h": "c",
         "stabilizer_types.h": "c",
-        "position_controller.h": "c"
+        "position_controller.h": "c",
+        "power_distribution.h": "c"
     },
 }

@@ -77,14 +77,14 @@ void init_mqtt(void)
     ESP_LOGI(TAG, "MQTT client started");
 }
 
-void send_message(state_t *state, control_t *control)
+void send_message(state_t *state, control_t *control, motor_power_t *motorPower)
 {
     snprintf(message, sizeof(message),
              "{\"pitch\": %.2f, \"roll\": %.2f, \"yaw\": %.2f, \"altitude\": %.2f, "
              "\"motor1\": %.2f, \"motor2\": %.2f, \"motor3\": %.2f, \"motor4\": %.2f, "
              "\"pidpitch\": %.2f, \"pidroll\": %.2f, \"pidyaw\": %.2f, \"pidalt\": %.2f}",
              state->attitude.pitch, state->attitude.roll, state->attitude.yaw, 0.0,
-             0.0, 0.0, 0.0, 0.0,
+             (double)motorPower->m1, (double)motorPower->m2, (double)motorPower->m3, (double)motorPower->m4,
              (double)control->pitch, (double)control->roll, (double)control->yaw, (double)control->thrust);
     esp_mqtt_client_publish(client, "drone/telemetry", message, 0, 1, 0);
 }

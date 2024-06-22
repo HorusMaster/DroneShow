@@ -40,7 +40,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-static const char *TAG = "Position_Contoller_PID";
+// static const char *TAG = "Position_Contoller_PID";
 
 struct pidInit_s
 {
@@ -152,9 +152,13 @@ static struct this_s this = {
     .thrustBase = 36000,
     .thrustMin = 20000,
 #endif
+// #else
+//     .thrustBase = 24000,
+//     .thrustMin = 5000,
+// #endif
 #else
-    .thrustBase = 24000,
-    .thrustMin = 5000,
+    .thrustBase = 1200,
+    .thrustMin = 600,
 #endif
 
 };

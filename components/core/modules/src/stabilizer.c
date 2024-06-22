@@ -12,6 +12,7 @@
 #include "rateSupervisor.h"
 #include "commander.h"
 #include "controller.h"
+#include "power_distribution.h"
 
 static const char *TAG = "stabilizer";
 static bool isInit;
@@ -20,6 +21,7 @@ static state_t state;
 static sensorData_t sensorData;
 static setpoint_t setpoint;
 static control_t control;
+static motor_power_t motorPower;
 
 static const char *estimatorType;
 static const char *controllerType;
@@ -34,7 +36,7 @@ static void mqttTask(void *param)
 {
   while (1)
   {
-    send_message(&state, &control);
+    send_message(&state, &control, &motorPower);
     vTaskDelay(M2T(100));
   }
 }
@@ -53,6 +55,7 @@ static void stabilizerTask(void *param)
     stateEstimator(&state, &sensorData, &control, tick);
     commanderGetSetpoint(&setpoint, &state);
     controller(&control, &setpoint, &sensorData, &state, tick);
+    powerDistribution(&control, &motorPower);
     //ESP_LOGI(TAG, "Control: %i %i %i %f", control.roll, control.pitch, control.yaw, control.thrust);
     tick++;
     if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount()))
@@ -74,6 +77,7 @@ void stabilizerInit(StateEstimatorType estimator)
 
   stateEstimatorInit(estimator);
   controllerInit(ControllerTypeAny);
+  powerDistributionInit();
   
   estimatorType = stateEstimatorGetName();
   controllerType = controllerGetName();

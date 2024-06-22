@@ -13,7 +13,7 @@ static StateEstimatorType currentEstimator = anyEstimator;
 static StateEstimatorType requiredEstimator = anyEstimator;
 
 static void initEstimator(const StateEstimatorType estimator);
-static void deinitEstimator(const StateEstimatorType estimator);
+// static void deinitEstimator(const StateEstimatorType estimator);
 
 typedef struct {
   void (*init)(void);
@@ -148,11 +148,11 @@ static void initEstimator(const StateEstimatorType estimator) {
   }
 }
 
-static void deinitEstimator(const StateEstimatorType estimator) {
-  if (estimatorFunctions[estimator].deinit) {
-    estimatorFunctions[estimator].deinit();
-  }
-}
+// static void deinitEstimator(const StateEstimatorType estimator) {
+//   if (estimatorFunctions[estimator].deinit) {
+//     estimatorFunctions[estimator].deinit();
+//   }
+// }
 
 bool stateEstimatorTest(void) {
   return estimatorFunctions[currentEstimator].test();

@@ -4,7 +4,7 @@
 #include "stabilizer_types.h"
 
 void init_mqtt(void);
-void send_message(state_t* state, control_t* control);
+void send_message(state_t *state, control_t *control, motor_power_t *motorPower);
 #include <stdbool.h>
 void set_full_stop(bool value);
 bool get_full_stop(void);

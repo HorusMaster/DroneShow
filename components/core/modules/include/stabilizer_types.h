@@ -49,6 +49,14 @@ typedef struct attitude_s {
 typedef float vec3d[vec3d_size];
 typedef float mat3d[vec3d_size][vec3d_size];
 
+/* Motor Power */
+typedef struct motor_power_s {
+  uint32_t m1;
+  uint32_t m2;
+  uint32_t m3;
+  uint32_t m4;
+} motor_power_t;
+
 /* x,y,z vector */
 struct vec3_s {
   uint32_t timestamp; // Timestamp when the data was computed
