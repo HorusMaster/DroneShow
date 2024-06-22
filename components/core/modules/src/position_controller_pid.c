@@ -40,7 +40,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// static const char *TAG = "Position_Contoller_PID";
+static const char *TAG = "Position_Contoller_PID";
 
 struct pidInit_s
 {
@@ -91,7 +91,7 @@ static const float thrustScale = 1000.0f;
 static struct this_s this = {
     .pidVX = {
         .init = {
-            .kp = 25.0f,
+            .kp = 1.0f,
             .ki = 1.0f,
             .kd = 0.0f,
         },
@@ -100,7 +100,7 @@ static struct this_s this = {
 
     .pidVY = {
         .init = {
-            .kp = 25.0f,
+            .kp = 1.0f,
             .ki = 1.0f,
             .kd = 0.0f,
         },
@@ -109,8 +109,8 @@ static struct this_s this = {
 
     .pidVZ = {
         .init = {
-            .kp = 22,
-            .ki = 15,
+            .kp = 1,
+            .ki = 1.5,
             .kd = 0,
         },
         .pid.dt = DT,
@@ -192,7 +192,7 @@ static float runPid(float input, struct pidAxis_s *axis, float setpoint, float d
 
 void positionController(float *thrust, attitude_t *attitude, setpoint_t *setpoint,
                         const state_t *state)
-{
+{  
   this.pidX.pid.outputLimit = xyVelMax * velMaxOverhead;
   this.pidY.pid.outputLimit = xyVelMax * velMaxOverhead;
   // The ROS landing detector will prematurely trip if
@@ -249,7 +249,7 @@ void velocityController(float *thrust, attitude_t *attitude, setpoint_t *setpoin
 
   attitude->roll = constrain(attitude->roll, -rpLimit, rpLimit);
   attitude->pitch = constrain(attitude->pitch, -rpLimit, rpLimit);
-
+  // ESP_LOGI(TAG, "attitude->roll = %f, attitude->pitch = %f", attitude->roll, attitude->pitch);
   // Thrust
   float thrustRaw = runPid(state->velocity.z, &this.pidVZ, setpoint->velocity.z, DT);
   // Scale the thrust and add feed forward term
@@ -270,3 +270,59 @@ void positionControllerResetAllPID()
   pidReset(&this.pidVY.pid);
   pidReset(&this.pidVZ.pid);
 }
+
+
+// static struct this_s this = {
+//     .pidVX = {
+//         .init = {
+//             .kp = 25.0f,
+//             .ki = 1.0f,
+//             .kd = 0.0f,
+//         },
+//         .pid.dt = DT,
+//     },
+
+//     .pidVY = {
+//         .init = {
+//             .kp = 25.0f,
+//             .ki = 1.0f,
+//             .kd = 0.0f,
+//         },
+//         .pid.dt = DT,
+//     },
+
+//     .pidVZ = {
+//         .init = {
+//             .kp = 22,
+//             .ki = 15,
+//             .kd = 0,
+//         },
+//         .pid.dt = DT,
+//     },
+
+//     .pidX = {
+//         .init = {
+//             .kp = 1.9f,
+//             .ki = 0.1f,
+//             .kd = 0,
+//         },
+//         .pid.dt = DT,
+//     },
+
+//     .pidY = {
+//         .init = {
+//             .kp = 1.9f,
+//             .ki = 0.1f,
+//             .kd = 0,
+//         },
+//         .pid.dt = DT,
+//     },
+
+//     .pidZ = {
+//         .init = {
+//             .kp = 1.6f,
+//             .ki = 0.5,
+//             .kd = 0,
+//         },
+//         .pid.dt = DT,
+//     },

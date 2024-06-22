@@ -14,7 +14,7 @@
 
 #define ATTITUDE_UPDATE_DT    (float)(1.0f/ATTITUDE_RATE)
 
-// static const char *TAG = "ControllerPid";
+static const char *TAG = "ControllerPid";
 static bool tiltCompensationEnabled = false;
 
 static attitude_t attitudeDesired;
@@ -94,7 +94,7 @@ void controllerPid(control_t *control, setpoint_t *setpoint,
     attitudeControllerCorrectAttitudePID(state->attitude.roll, state->attitude.pitch, state->attitude.yaw,
                                 attitudeDesired.roll, attitudeDesired.pitch, attitudeDesired.yaw,
                                 &rateDesired.roll, &rateDesired.pitch, &rateDesired.yaw);
-
+    
     // For roll and pitch, if velocity mode, overwrite rateDesired with the setpoint
     // value. Also reset the PID to avoid error buildup, which can lead to unstable
     // behavior if level mode is engaged later
@@ -110,10 +110,11 @@ void controllerPid(control_t *control, setpoint_t *setpoint,
     // TODO: Investigate possibility to subtract gyro drift.
     attitudeControllerCorrectRatePID(sensors->gyro.x, -sensors->gyro.y, sensors->gyro.z,
                              rateDesired.roll, rateDesired.pitch, rateDesired.yaw);
-
+    
     attitudeControllerGetActuatorOutput(&control->roll,
                                         &control->pitch,
                                         &control->yaw);
+    
 
     control->yaw = -control->yaw;
 

@@ -133,11 +133,7 @@ void commanderGetSetpoint(setpoint_t *setpoint, const state_t *state)
    // ELIMINAR LAS SIGUIENTES LINEAS    
   setpoint->position.z = 1.0f;  // Elevar un metro
   setpoint->mode.z = modeAbs;  // Asegurar que el modo Z esté en modo de posición
-  
 
-  // Log para depuración
-  // printf("Setpoint position.z: %f\n", setpoint->position.z);
-  // printf("Setpoint mode.z: %d\n", setpoint->mode.z);
   // This copying is not strictly necessary because stabilizer.c already keeps
   // a static state_t containing the most recent state estimate. However, it is
   // not accessible by the public interface.

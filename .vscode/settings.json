@@ -52,6 +52,7 @@
         "controller_pid.h": "c",
         "stabilizer_types.h": "c",
         "position_controller.h": "c",
-        "power_distribution.h": "c"
+        "power_distribution.h": "c",
+        "attitude_controller.h": "c"
     },
 }
