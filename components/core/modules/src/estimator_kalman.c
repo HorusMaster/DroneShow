@@ -15,17 +15,17 @@ static const char *TAG = "estimator_kalman";
 
 static bool isInit = false;
 
-static Axis3f accAccumulator;
-static float thrustAccumulator;
-static Axis3f gyroAccumulator;
-static float baroAslAccumulator;
-static uint32_t accAccumulatorCount;
-static uint32_t thrustAccumulatorCount;
-static uint32_t gyroAccumulatorCount;
-static uint32_t baroAccumulatorCount;
-static bool quadIsFlying = false;
-static uint32_t lastFlightCmd;
-static uint32_t takeoffTime;
+// static Axis3f accAccumulator;
+// static float thrustAccumulator;
+// static Axis3f gyroAccumulator;
+// static float baroAslAccumulator;
+// static uint32_t accAccumulatorCount;
+// static uint32_t thrustAccumulatorCount;
+// static uint32_t gyroAccumulatorCount;
+// static uint32_t baroAccumulatorCount;
+// static bool quadIsFlying = false;
+// static uint32_t lastFlightCmd;
+// static uint32_t takeoffTime;
 
 // NO_DMA_CCM_SAFE_ZERO_INIT static kalmanCoreData_t coreData;
 
@@ -148,16 +148,16 @@ void estimatorKalman(state_t *state, sensorData_t *sensorData, control_t *contro
     // as quickly as possible. The dataMutex must only be locked short periods by the task.
     xSemaphoreTake(dataMutex, portMAX_DELAY);
 
-    // Average the last IMU measurements. We do this because the prediction loop is
-    // slower than the IMU loop, but the IMU information is required externally at
-    // a higher rate (for body rate control).
-    if (sensorsReadGyro(&sensorData->gyro))
-    {
-        gyroAccumulator.x += sensorData->gyro.x;
-        gyroAccumulator.y += sensorData->gyro.y;
-        gyroAccumulator.z += sensorData->gyro.z;
-        gyroAccumulatorCount++;
-    }
+    // // Average the last IMU measurements. We do this because the prediction loop is
+    // // slower than the IMU loop, but the IMU information is required externally at
+    // // a higher rate (for body rate control).
+    // if (sensorsReadGyro(&sensorData->gyro))
+    // {
+    //     gyroAccumulator.x += sensorData->gyro.x;
+    //     gyroAccumulator.y += sensorData->gyro.y;
+    //     gyroAccumulator.z += sensorData->gyro.z;
+    //     gyroAccumulatorCount++;
+    // }
 }
 
 static void kalmanTask(void *parameters)

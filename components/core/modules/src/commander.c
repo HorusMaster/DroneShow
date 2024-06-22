@@ -77,7 +77,7 @@ void commanderSetSetpoint(setpoint_t *setpoint, int priority)
 
   const BaseType_t peekResult = xQueuePeek(priorityQueue, &currentPriority, 0);
   // ASSERT(peekResult == pdTRUE);
-
+  assert(peekResult == pdTRUE);
   if (priority >= currentPriority) {
     setpoint->timestamp = xTaskGetTickCount();
     // This is a potential race but without effect on functionality
@@ -126,9 +126,19 @@ void commanderGetSetpoint(setpoint_t *setpoint, const state_t *state)
     setpoint->mode.yaw = modeVelocity;
     setpoint->attitude.roll = 0;
     setpoint->attitude.pitch = 0;
-    setpoint->attitudeRate.yaw = 0;
-    // Keep Z as it is
+    setpoint->attitudeRate.yaw = 0;    
+    // Keep Z as it is 
   }
+   // Actualiza la posición Z y el modo si el setpoint es reciente
+  if ((currentTime - setpoint->timestamp) <= COMMANDER_WDT_TIMEOUT_SHUTDOWN) {
+    // Ejemplo de actualización del setpoint directamente
+    setpoint->position.z = 1.0f;  // Elevar un metro
+    setpoint->mode.z = modeAbs;  // Asegurar que el modo Z esté en modo de posición
+  }
+
+  // Log para depuración
+  // printf("Setpoint position.z: %f\n", setpoint->position.z);
+  // printf("Setpoint mode.z: %d\n", setpoint->mode.z);
   // This copying is not strictly necessary because stabilizer.c already keeps
   // a static state_t containing the most recent state estimate. However, it is
   // not accessible by the public interface.
@@ -151,6 +161,6 @@ int commanderGetActivePriority(void)
 
   const BaseType_t peekResult = xQueuePeek(priorityQueue, &priority, 0);
   // ASSERT(peekResult == pdTRUE);
-
+  assert(peekResult == pdTRUE);
   return priority;
 }
