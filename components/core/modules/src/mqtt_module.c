@@ -2,32 +2,12 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include "stabilizer_types.h"
+#include "stabilizer.h"
+#include "power_distribution.h"
 
 static const char *TAG = "mqtt_module";
 static esp_mqtt_client_handle_t client;
-static bool full_stop = true;
-static bool restart_escs = false;
 static char message[512];
-
-void set_full_stop(bool value)
-{
-    full_stop = value;
-}
-
-bool get_full_stop(void)
-{
-    return full_stop;
-}
-
-void set_restart_escs(bool value)
-{
-    restart_escs = value;
-}
-
-bool get_restart_escs(void)
-{
-    return restart_escs;
-}
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -46,17 +26,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         if (strncmp(event->data, "s", event->data_len) == 0 && event->data_len == 1) // Verifica longitud correcta
         {
             ESP_LOGI(TAG, "Stopping ESCS");
-            set_full_stop(true);
+            emergencyStopEnable(true);
         }
         else if (strncmp(event->data, "start", event->data_len) == 0 && event->data_len == 5) // Verifica longitud correcta
         {
             ESP_LOGI(TAG, "Starting ESCS");
-            set_full_stop(false);
+            emergencyStopEnable(false);
         }
         else if (strncmp(event->data, "restart", event->data_len) == 0 && event->data_len == 7) // Verifica longitud correcta
         {
             ESP_LOGI(TAG, "Restarting ESCS");
-            set_restart_escs(true);
+            test_motors();
         }
         break;
     default:

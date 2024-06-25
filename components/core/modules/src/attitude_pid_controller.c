@@ -60,7 +60,7 @@ static int16_t rollOutput;
 static int16_t pitchOutput;
 static int16_t yawOutput;
 
-// static float rpLimit = 100;
+static float rpLimit = 200;
 
 static bool isInit;
 
@@ -106,13 +106,13 @@ void attitudeControllerCorrectRatePID(
 {
   pidSetDesired(&pidRollRate, rollRateDesired);
   rollOutput = saturateSignedInt16(pidUpdate(&pidRollRate, rollRateActual, true));
-  // rollOutput = constrain(rollOutput, -rpLimit, rpLimit);
+  rollOutput = constrain(rollOutput, -rpLimit, rpLimit);
   pidSetDesired(&pidPitchRate, pitchRateDesired);
   pitchOutput = saturateSignedInt16(pidUpdate(&pidPitchRate, pitchRateActual, true));
-  // pitchOutput = constrain(pitchOutput, -rpLimit, rpLimit); JLO SHOULD BE REMOVED?
+  pitchOutput = constrain(pitchOutput, -rpLimit, rpLimit);
   pidSetDesired(&pidYawRate, yawRateDesired);
   yawOutput = saturateSignedInt16(pidUpdate(&pidYawRate, yawRateActual, true));
-  // yawOutput = constrain(yawOutput, -rpLimit, rpLimit);
+  yawOutput = constrain(yawOutput, -rpLimit, rpLimit);
 }
 
 void attitudeControllerCorrectAttitudePID(

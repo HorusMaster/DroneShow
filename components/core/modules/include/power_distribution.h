@@ -31,6 +31,7 @@
 void powerDistributionInit(void);
 bool powerDistributionTest(void);
 void powerDistribution(const control_t *control, motor_power_t *motorPower);
+void test_motors();
 void powerStop();
 
 

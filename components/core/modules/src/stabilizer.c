@@ -23,6 +23,7 @@ static setpoint_t setpoint;
 static control_t control;
 static motor_power_t motorPower;
 
+static bool emergencyStop = true;
 static const char *estimatorType;
 static const char *controllerType;
 // Se debe de incluir FREERTOS para el error de unknown type name 'StackType_t'
@@ -55,7 +56,14 @@ static void stabilizerTask(void *param)
     stateEstimator(&state, &sensorData, &control, tick);
     commanderGetSetpoint(&setpoint, &state);
     controller(&control, &setpoint, &sensorData, &state, tick);
-    powerDistribution(&control, &motorPower);
+
+    if (emergencyStop) {
+        powerStop();
+      } else {
+        powerDistribution(&control, &motorPower);
+      }
+
+    
     //ESP_LOGI(TAG, "Control: %i %i %i %f", control.roll, control.pitch, control.yaw, control.thrust);
     tick++;
     if (!rateSupervisorValidate(&rateSupervisorContext, xTaskGetTickCount()))
@@ -65,8 +73,7 @@ static void stabilizerTask(void *param)
         ESP_LOGW(TAG, "WARNING: stabilizer loop rate is off (%" PRIu32 ")\n", rateSupervisorLatestCount(&rateSupervisorContext));
         rateWarningDisplayed = true;
       }
-    }
-    vTaskDelay(M2T(20));
+    }    
   }
 }
 
@@ -87,4 +94,11 @@ void stabilizerInit(StateEstimatorType estimator)
   STATIC_MEM_TASK_CREATE(mqttTask, mqttTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
 
   isInit = true;
+}
+
+
+
+void emergencyStopEnable(bool enable)
+{
+  emergencyStop = enable;
 }

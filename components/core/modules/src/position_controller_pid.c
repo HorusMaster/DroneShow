@@ -40,7 +40,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-static const char *TAG = "Position_Contoller_PID";
+//static const char *TAG = "Position_Contoller_PID";
 
 struct pidInit_s
 {

@@ -14,7 +14,7 @@
 
 #define ATTITUDE_UPDATE_DT    (float)(1.0f/ATTITUDE_RATE)
 
-static const char *TAG = "ControllerPid";
+// static const char *TAG = "ControllerPid";
 static bool tiltCompensationEnabled = false;
 
 static attitude_t attitudeDesired;
