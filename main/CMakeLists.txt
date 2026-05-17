@@ -11,6 +11,7 @@ idf_component_register(
         esp_netif
         esp_wifi
         nvs_flash
+        json
         dshot_component
         imu_component
     EMBED_FILES "index.html"

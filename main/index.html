@@ -3,46 +3,63 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Drone Fase 0</title>
+<title>Drone Fase 1</title>
 <style>
 body{font-family:monospace;background:#0e0e10;color:#eee;margin:0;padding:14px}
 h1{margin:0 0 10px;font-size:16px;color:#4af;letter-spacing:1px}
 .row{display:flex;gap:14px;flex-wrap:wrap}
 .panel{background:#17181c;border:1px solid #2a2c33;border-radius:6px;padding:12px;min-width:140px}
 .lbl{color:#7f8590;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
-.big{font-size:26px;font-weight:bold;line-height:1.15}
-.horizon{width:170px;height:170px;border-radius:50%;border:2px solid #444;overflow:hidden;position:relative;background:#3d7bb8}
+.big{font-size:24px;font-weight:bold;line-height:1.15}
+.med{font-size:16px}
+.horizon{width:160px;height:160px;border-radius:50%;border:2px solid #444;overflow:hidden;position:relative;background:#3d7bb8}
 .horizon .ground{position:absolute;left:-50%;right:-50%;top:50%;bottom:-100%;background:#8b5a2b;transition:transform 60ms linear;transform-origin:center top}
 .horizon::after{content:"";position:absolute;top:50%;left:25%;right:25%;height:2px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.6)}
 .horizon::before{content:"";position:absolute;top:calc(50% - 6px);left:50%;width:2px;height:14px;margin-left:-1px;background:#fff}
 .bars{display:flex;gap:6px}
-.bar{width:36px;height:130px;background:#202229;border:1px solid #2e3038;position:relative;display:flex;flex-direction:column;justify-content:flex-end}
-.bar .fill{background:linear-gradient(to top,#4af,#7df);height:0%;transition:height 80ms linear}
+.bar{width:32px;height:120px;background:#202229;border:1px solid #2e3038;position:relative;display:flex;flex-direction:column;justify-content:flex-end}
+.bar .fill{background:linear-gradient(to top,#4af,#7df);height:0%;transition:height 60ms linear}
 .bar .cap{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10px;color:#888}
 button{background:#23252c;color:#eee;border:1px solid #34373f;padding:9px 14px;cursor:pointer;border-radius:4px;font-family:monospace;font-size:13px;margin:3px 0}
 button:hover{background:#2d2f37}
 button:active{transform:translateY(1px)}
+button:disabled{opacity:.35;cursor:not-allowed}
 button.stop{background:#a52525;border-color:#d84a4a;font-size:17px;padding:14px 22px;font-weight:bold}
 button.stop:hover{background:#c02b2b}
 button.start{background:#1e7a44;border-color:#2dba63}
 button.start:hover{background:#239352}
+button.arm{background:#b8860b;border-color:#daa520;font-size:15px;padding:11px 18px;font-weight:bold}
+button.arm:hover{background:#daa520}
+button.armed{background:#1e7a44;border-color:#2dba63}
+button.armed:hover{background:#239352}
 .status{display:inline-block;font-size:11px;padding:3px 8px;border-radius:3px;font-weight:bold}
 .status.ok{background:#1e7a44;color:#fff}
+.status.warn{background:#b8860b;color:#fff}
 .status.err{background:#a52525;color:#fff}
-.kbd{background:#1a1b1f;padding:1px 5px;border:1px solid #2a2c33;border-radius:3px;font-size:11px}
-.tip{color:#888;font-size:11px;margin-top:8px}
+.tip{color:#888;font-size:11px;margin-top:6px}
+input[type=range]{width:100%;margin:6px 0}
+.slider-row{display:grid;grid-template-columns:80px 1fr 60px;align-items:center;gap:8px;margin:4px 0}
+.slider-row .name{font-size:11px;color:#aaa}
+.slider-row .val{font-size:12px;text-align:right;color:#7df}
+.throttle-block{display:flex;align-items:center;gap:14px}
+.throttle-block input[type=range]{writing-mode:vertical-lr;direction:rtl;-webkit-appearance:slider-vertical;width:40px;height:200px}
+.thr-val{font-size:36px;font-weight:bold;color:#7df}
 </style>
 </head>
 <body>
-<h1>DRONE FASE 0 &mdash; diagnostico (sin PID, sin vuelo)</h1>
+<h1>DRONE FASE 1 &mdash; PID de actitud (atado, throttle manual)</h1>
 
 <div class="row">
   <div class="panel">
     <div class="lbl">Conexion</div>
     <div id="conn" class="status err">desconectado</div>
-    <div class="lbl" style="margin-top:10px">Emergency stop</div>
+    <div class="lbl" style="margin-top:8px">E-Stop</div>
     <div id="stop" class="status err">ACTIVO</div>
-    <div class="tip">arranca SIEMPRE en stop. Apreta START para liberar.</div>
+    <div class="lbl" style="margin-top:8px">Estado</div>
+    <div id="armed" class="status warn">READY</div>
+    <button class="stop" onclick="cmd({cmd:'stop'})">STOP</button>
+    <button class="start" onclick="cmd({cmd:'start'})">START</button>
+    <button id="armBtn" class="arm" onclick="toggleArm()">ARM</button>
   </div>
 
   <div class="panel">
@@ -53,59 +70,174 @@ button.start:hover{background:#239352}
   <div class="panel">
     <div class="lbl">Pitch</div><div class="big" id="p">0.0&deg;</div>
     <div class="lbl">Roll</div><div class="big" id="r">0.0&deg;</div>
-    <div class="lbl">Yaw</div><div class="big" id="y">0.0&deg;</div>
-    <div class="lbl">Altitud</div><div class="big" id="a">0.00 m</div>
+    <div class="lbl">Yaw</div><div class="big" id="y">0.0&deg;</div><div id="ysp" style="font-size:11px;color:#7df;height:14px"></div>
+    <div class="lbl">Altitud</div><div class="med" id="a">0.00 m</div>
   </div>
 
   <div class="panel">
-    <div class="lbl">Motores (0..2047)</div>
-    <div class="bars" style="margin-top:6px;margin-bottom:24px">
+    <div class="lbl">PID outputs</div>
+    <div class="lbl" style="margin-top:6px">Pitch</div><div class="med" id="pop">0.0</div>
+    <div class="lbl">Roll</div><div class="med" id="por">0.0</div>
+    <div class="lbl">Yaw</div><div class="med" id="poy">0.0</div>
+    <div class="lbl" style="margin-top:8px">Motores (0..1000)</div>
+    <div class="bars" style="margin-top:4px;margin-bottom:22px">
       <div class="bar"><div id="m1f" class="fill"></div><div class="cap">M1</div></div>
       <div class="bar"><div id="m2f" class="fill"></div><div class="cap">M2</div></div>
       <div class="bar"><div id="m3f" class="fill"></div><div class="cap">M3</div></div>
       <div class="bar"><div id="m4f" class="fill"></div><div class="cap">M4</div></div>
     </div>
   </div>
+
+  <div class="panel">
+    <div class="lbl" style="text-align:center">Throttle base</div>
+    <div class="throttle-block">
+      <input id="thr" type="range" min="0" max="1000" step="1" value="0" oninput="onThr(this.value)">
+      <div><div class="thr-val" id="thrv">0</div><div class="lbl">0..1000</div></div>
+    </div>
+    <button onclick="thrZero()" style="width:100%">Reset 0</button>
+    <div class="tip">Para ARM, el throttle debe estar en 0.</div>
+  </div>
 </div>
 
-<div class="panel" style="margin-top:14px">
-  <div class="lbl">Comandos</div>
-  <button class="stop" onclick="cmd({cmd:'stop'})">STOP</button>
-  <button class="start" onclick="cmd({cmd:'start'})">START</button>
-  &nbsp;
-  <button onclick="cmd({cmd:'test',motor:1})">Test M1</button>
-  <button onclick="cmd({cmd:'test',motor:2})">Test M2</button>
-  <button onclick="cmd({cmd:'test',motor:3})">Test M3</button>
-  <button onclick="cmd({cmd:'test',motor:4})">Test M4</button>
-  <button onclick="cmd({cmd:'test_all'})">Test ALL (secuencial)</button>
-  <div class="tip">cada test gira el motor a throttle <span class="kbd">300</span> por 3 segundos. <b>Quitar helices antes.</b></div>
+<div class="row" style="margin-top:14px">
+  <div class="panel" style="flex:1;min-width:340px">
+    <div class="lbl">Ganancias PID (en vivo)</div>
+    <div class="slider-row">
+      <div class="name">kP pitch/roll</div>
+      <input type="range" min="0" max="20" step="0.1" id="kp_pr" oninput="onGain()">
+      <div class="val" id="kp_pr_v">0.0</div>
+    </div>
+    <div class="slider-row">
+      <div class="name">kI pitch/roll</div>
+      <input type="range" min="0" max="5" step="0.05" id="ki_pr" oninput="onGain()">
+      <div class="val" id="ki_pr_v">0.0</div>
+    </div>
+    <div class="slider-row">
+      <div class="name">kD pitch/roll</div>
+      <input type="range" min="0" max="3" step="0.05" id="kd_pr" oninput="onGain()">
+      <div class="val" id="kd_pr_v">0.0</div>
+    </div>
+    <div class="slider-row">
+      <div class="name">kP yaw</div>
+      <input type="range" min="0" max="5" step="0.05" id="kp_yaw" oninput="onGain()">
+      <div class="val" id="kp_yaw_v">0.0</div>
+    </div>
+    <button onclick="zeroPid()">Zero PID (todo en 0)</button>
+    <div class="tip">Empezar todos en 0. Subir <b>kP</b> de a poco hasta que reaccione. Si oscila r&aacute;pido, bajar kP. Si reacciona lento, agregar <b>kD</b>. <b>kI</b> al final, gentil.</div>
+  </div>
+
+  <div class="panel">
+    <div class="lbl">Calibracion / Tests</div>
+    <div class="tip" style="margin-bottom:6px">Apoyar drone plano, apretar Calibrate. Solo en READY.</div>
+    <button onclick="cmd({cmd:'calibrate'})" style="background:#1e4d7a;border-color:#3a7db8">Calibrate Level</button>
+    <div class="tip" style="margin:8px 0 6px">Tests motores (sin armar):</div>
+    <button onclick="cmd({cmd:'test',motor:1})">Test M1</button>
+    <button onclick="cmd({cmd:'test',motor:2})">Test M2</button>
+    <button onclick="cmd({cmd:'test',motor:3})">Test M3</button>
+    <button onclick="cmd({cmd:'test',motor:4})">Test M4</button>
+    <button onclick="cmd({cmd:'test_all'})">Test ALL</button>
+  </div>
 </div>
 
 <script>
-let ws;
+let ws, last={};
 function $(id){return document.getElementById(id)}
+function cmd(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+
+// Throttle slider — rate-limit a 15 Hz
+let thrTimer=null;
+function onThr(v){
+  $('thrv').textContent=v;
+  if(thrTimer) return;
+  thrTimer=setTimeout(()=>{ thrTimer=null; cmd({cmd:'throttle',value:parseInt($('thr').value)}); }, 66);
+}
+function thrZero(){ $('thr').value=0; $('thrv').textContent='0'; cmd({cmd:'throttle',value:0}); }
+
+// Gains slider — rate-limit a 10 Hz
+let gainTimer=null;
+function onGain(){
+  $('kp_pr_v').textContent=parseFloat($('kp_pr').value).toFixed(2);
+  $('ki_pr_v').textContent=parseFloat($('ki_pr').value).toFixed(2);
+  $('kd_pr_v').textContent=parseFloat($('kd_pr').value).toFixed(2);
+  $('kp_yaw_v').textContent=parseFloat($('kp_yaw').value).toFixed(2);
+  if(gainTimer) return;
+  gainTimer=setTimeout(()=>{
+    gainTimer=null;
+    cmd({cmd:'gains',
+      kp_pr:parseFloat($('kp_pr').value),
+      ki_pr:parseFloat($('ki_pr').value),
+      kd_pr:parseFloat($('kd_pr').value),
+      kp_yaw:parseFloat($('kp_yaw').value)});
+  }, 100);
+}
+function zeroPid(){
+  $('kp_pr').value=0; $('ki_pr').value=0; $('kd_pr').value=0; $('kp_yaw').value=0;
+  onGain();
+}
+
+function toggleArm(){
+  if(last.armed) cmd({cmd:'disarm'});
+  else           cmd({cmd:'arm'});
+}
+
 function connect(){
-  const url='ws://'+location.host+'/ws';
-  ws=new WebSocket(url);
+  ws=new WebSocket('ws://'+location.host+'/ws');
   ws.onopen=()=>{ $('conn').textContent='conectado'; $('conn').className='status ok'; };
   ws.onclose=()=>{ $('conn').textContent='desconectado'; $('conn').className='status err'; setTimeout(connect,1500); };
   ws.onmessage=ev=>{
-    let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
-    $('p').textContent=d.pitch.toFixed(1)+'°';
-    $('r').textContent=d.roll.toFixed(1)+'°';
-    $('y').textContent=d.yaw.toFixed(1)+'°';
-    $('a').textContent=d.alt.toFixed(2)+' m';
-    $('horiz').style.transform='rotate('+(-d.roll)+'deg) translateY('+(d.pitch*1.8)+'px)';
-    for(let i=0;i<4;i++){
-      const pct=Math.min(100,Math.max(0,(d.m[i]/2047)*100));
-      $('m'+(i+1)+'f').style.height=pct+'%';
-    }
-    const s=$('stop');
-    if(d.stop){ s.textContent='ACTIVO'; s.className='status err'; }
-    else      { s.textContent='OK';     s.className='status ok'; }
+    let d;
+    try { d=JSON.parse(ev.data); }
+    catch(e) { console.error('JSON parse fallo:', e, ev.data); return; }
+    last=d;
+    window._lastMsg=d;
+    try {
+      $('p').textContent=(d.pitch||0).toFixed(1)+'°';
+      $('r').textContent=(d.roll||0).toFixed(1)+'°';
+      $('y').textContent=(d.yaw||0).toFixed(1)+'°';
+      $('ysp').textContent= d.armed===true && typeof d.yaw_sp==='number' ? '↳ yaw setpoint '+d.yaw_sp.toFixed(0)+'°' : '';
+      $('a').textContent=(d.alt||0).toFixed(2)+' m';
+      $('horiz').style.transform='rotate('+(-(d.roll||0))+'deg) translateY('+((d.pitch||0)*1.8)+'px)';
+    } catch(e) { console.error('attitude update:', e); }
+    try {
+      if(Array.isArray(d.pid)){
+        $('pop').textContent=(d.pid[0]||0).toFixed(1);
+        $('por').textContent=(d.pid[1]||0).toFixed(1);
+        $('poy').textContent=(d.pid[2]||0).toFixed(1);
+      }
+      if(Array.isArray(d.m)) for(let i=0;i<4;i++){
+        const pct=Math.min(100,Math.max(0,((d.m[i]||0)/1200)*100));
+        $('m'+(i+1)+'f').style.height=pct+'%';
+      }
+    } catch(e) { console.error('pid/motors update:', e); }
+    try {
+      const stopActive = d.stop === true;
+      const armedActive = d.armed === true;
+      const s=$('stop');
+      if(stopActive){ s.textContent='ACTIVO'; s.className='status err'; }
+      else          { s.textContent='OK';     s.className='status ok'; }
+      const a=$('armed'); const b=$('armBtn');
+      if(stopActive){
+        a.textContent='E-STOP'; a.className='status err';
+        b.textContent='ARM'; b.className='arm'; b.disabled=true;
+      } else if(armedActive){
+        a.textContent='ARMED'; a.className='status ok';
+        b.textContent='DISARM'; b.className='arm armed'; b.disabled=false;
+      } else {
+        a.textContent='READY'; a.className='status warn';
+        b.textContent='ARM'; b.className='arm'; b.disabled=false;
+      }
+    } catch(e) { console.error('state update:', e); }
+    try {
+      if(d.gains && !window._gainsInit){
+        window._gainsInit=true;
+        $('kp_pr').value=d.gains.kp_pr;  $('kp_pr_v').textContent=(d.gains.kp_pr||0).toFixed(2);
+        $('ki_pr').value=d.gains.ki_pr;  $('ki_pr_v').textContent=(d.gains.ki_pr||0).toFixed(2);
+        $('kd_pr').value=d.gains.kd_pr;  $('kd_pr_v').textContent=(d.gains.kd_pr||0).toFixed(2);
+        $('kp_yaw').value=d.gains.kp_yaw;$('kp_yaw_v').textContent=(d.gains.kp_yaw||0).toFixed(2);
+      }
+    } catch(e) { console.error('gains update:', e); }
   };
 }
-function cmd(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
 connect();
 </script>
 </body>
