@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drone Fase 0</title>
+<style>
+body{font-family:monospace;background:#0e0e10;color:#eee;margin:0;padding:14px}
+h1{margin:0 0 10px;font-size:16px;color:#4af;letter-spacing:1px}
+.row{display:flex;gap:14px;flex-wrap:wrap}
+.panel{background:#17181c;border:1px solid #2a2c33;border-radius:6px;padding:12px;min-width:140px}
+.lbl{color:#7f8590;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.big{font-size:26px;font-weight:bold;line-height:1.15}
+.horizon{width:170px;height:170px;border-radius:50%;border:2px solid #444;overflow:hidden;position:relative;background:#3d7bb8}
+.horizon .ground{position:absolute;left:-50%;right:-50%;top:50%;bottom:-100%;background:#8b5a2b;transition:transform 60ms linear;transform-origin:center top}
+.horizon::after{content:"";position:absolute;top:50%;left:25%;right:25%;height:2px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.6)}
+.horizon::before{content:"";position:absolute;top:calc(50% - 6px);left:50%;width:2px;height:14px;margin-left:-1px;background:#fff}
+.bars{display:flex;gap:6px}
+.bar{width:36px;height:130px;background:#202229;border:1px solid #2e3038;position:relative;display:flex;flex-direction:column;justify-content:flex-end}
+.bar .fill{background:linear-gradient(to top,#4af,#7df);height:0%;transition:height 80ms linear}
+.bar .cap{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10px;color:#888}
+button{background:#23252c;color:#eee;border:1px solid #34373f;padding:9px 14px;cursor:pointer;border-radius:4px;font-family:monospace;font-size:13px;margin:3px 0}
+button:hover{background:#2d2f37}
+button:active{transform:translateY(1px)}
+button.stop{background:#a52525;border-color:#d84a4a;font-size:17px;padding:14px 22px;font-weight:bold}
+button.stop:hover{background:#c02b2b}
+button.start{background:#1e7a44;border-color:#2dba63}
+button.start:hover{background:#239352}
+.status{display:inline-block;font-size:11px;padding:3px 8px;border-radius:3px;font-weight:bold}
+.status.ok{background:#1e7a44;color:#fff}
+.status.err{background:#a52525;color:#fff}
+.kbd{background:#1a1b1f;padding:1px 5px;border:1px solid #2a2c33;border-radius:3px;font-size:11px}
+.tip{color:#888;font-size:11px;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>DRONE FASE 0 &mdash; diagnostico (sin PID, sin vuelo)</h1>
+
+<div class="row">
+  <div class="panel">
+    <div class="lbl">Conexion</div>
+    <div id="conn" class="status err">desconectado</div>
+    <div class="lbl" style="margin-top:10px">Emergency stop</div>
+    <div id="stop" class="status err">ACTIVO</div>
+    <div class="tip">arranca SIEMPRE en stop. Apreta START para liberar.</div>
+  </div>
+
+  <div class="panel">
+    <div class="lbl" style="text-align:center;margin-bottom:6px">Horizonte</div>
+    <div class="horizon"><div id="horiz" class="ground"></div></div>
+  </div>
+
+  <div class="panel">
+    <div class="lbl">Pitch</div><div class="big" id="p">0.0&deg;</div>
+    <div class="lbl">Roll</div><div class="big" id="r">0.0&deg;</div>
+    <div class="lbl">Yaw</div><div class="big" id="y">0.0&deg;</div>
+    <div class="lbl">Altitud</div><div class="big" id="a">0.00 m</div>
+  </div>
+
+  <div class="panel">
+    <div class="lbl">Motores (0..2047)</div>
+    <div class="bars" style="margin-top:6px;margin-bottom:24px">
+      <div class="bar"><div id="m1f" class="fill"></div><div class="cap">M1</div></div>
+      <div class="bar"><div id="m2f" class="fill"></div><div class="cap">M2</div></div>
+      <div class="bar"><div id="m3f" class="fill"></div><div class="cap">M3</div></div>
+      <div class="bar"><div id="m4f" class="fill"></div><div class="cap">M4</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+  <div class="lbl">Comandos</div>
+  <button class="stop" onclick="cmd({cmd:'stop'})">STOP</button>
+  <button class="start" onclick="cmd({cmd:'start'})">START</button>
+  &nbsp;
+  <button onclick="cmd({cmd:'test',motor:1})">Test M1</button>
+  <button onclick="cmd({cmd:'test',motor:2})">Test M2</button>
+  <button onclick="cmd({cmd:'test',motor:3})">Test M3</button>
+  <button onclick="cmd({cmd:'test',motor:4})">Test M4</button>
+  <button onclick="cmd({cmd:'test_all'})">Test ALL (secuencial)</button>
+  <div class="tip">cada test gira el motor a throttle <span class="kbd">300</span> por 3 segundos. <b>Quitar helices antes.</b></div>
+</div>
+
+<script>
+let ws;
+function $(id){return document.getElementById(id)}
+function connect(){
+  const url='ws://'+location.host+'/ws';
+  ws=new WebSocket(url);
+  ws.onopen=()=>{ $('conn').textContent='conectado'; $('conn').className='status ok'; };
+  ws.onclose=()=>{ $('conn').textContent='desconectado'; $('conn').className='status err'; setTimeout(connect,1500); };
+  ws.onmessage=ev=>{
+    let d; try{ d=JSON.parse(ev.data); }catch(e){ return; }
+    $('p').textContent=d.pitch.toFixed(1)+'°';
+    $('r').textContent=d.roll.toFixed(1)+'°';
+    $('y').textContent=d.yaw.toFixed(1)+'°';
+    $('a').textContent=d.alt.toFixed(2)+' m';
+    $('horiz').style.transform='rotate('+(-d.roll)+'deg) translateY('+(d.pitch*1.8)+'px)';
+    for(let i=0;i<4;i++){
+      const pct=Math.min(100,Math.max(0,(d.m[i]/2047)*100));
+      $('m'+(i+1)+'f').style.height=pct+'%';
+    }
+    const s=$('stop');
+    if(d.stop){ s.textContent='ACTIVO'; s.className='status err'; }
+    else      { s.textContent='OK';     s.className='status ok'; }
+  };
+}
+function cmd(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+connect();
+</script>
+</body>
+</html>
