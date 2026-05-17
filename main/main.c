@@ -11,6 +11,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 
 #include "10Dof_IMU.h"
@@ -61,6 +62,9 @@ typedef struct {
 } pid_state_t;
 
 static pid_state_t g_pid_p, g_pid_r, g_pid_y;
+
+static volatile bool g_persist_dirty = false;
+#define NVS_NS "drone"
 
 typedef enum { MCMD_M1, MCMD_M2, MCMD_M3, MCMD_M4, MCMD_ALL } motor_cmd_t;
 static QueueHandle_t g_cmd_q;
@@ -164,6 +168,7 @@ void api_set_gains(const pid_gains_t *in) {
     xSemaphoreTake(g_state_mtx, portMAX_DELAY);
     g_gains = *in;
     xSemaphoreGive(g_state_mtx);
+    g_persist_dirty = true;
 }
 
 static bool push_cmd(motor_cmd_t c) {
@@ -193,8 +198,63 @@ bool api_calibrate_level(void) {
     float new_po = g_pitch_offset;
     float new_ro = g_roll_offset;
     xSemaphoreGive(g_state_mtx);
+    g_persist_dirty = true;
     ESP_LOGI(TAG, "Calibrate: pitch_off=%.2f roll_off=%.2f", new_po, new_ro);
     return true;
+}
+
+static void storage_load(void) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) {
+        ESP_LOGI(TAG, "NVS: namespace vacio, usando defaults");
+        return;
+    }
+    pid_gains_t gains;
+    size_t sz = sizeof(gains);
+    if (nvs_get_blob(h, "gains", &gains, &sz) == ESP_OK && sz == sizeof(gains)) {
+        xSemaphoreTake(g_state_mtx, portMAX_DELAY);
+        g_gains = gains;
+        xSemaphoreGive(g_state_mtx);
+        ESP_LOGI(TAG, "NVS load gains: kP=%.2f kI=%.2f kD=%.2f kP_yaw=%.2f",
+                 gains.kp_pr, gains.ki_pr, gains.kd_pr, gains.kp_yaw);
+    }
+    float offs[2];
+    sz = sizeof(offs);
+    if (nvs_get_blob(h, "offs", offs, &sz) == ESP_OK && sz == sizeof(offs)) {
+        xSemaphoreTake(g_state_mtx, portMAX_DELAY);
+        g_pitch_offset = offs[0];
+        g_roll_offset  = offs[1];
+        xSemaphoreGive(g_state_mtx);
+        ESP_LOGI(TAG, "NVS load offsets: pitch=%.2f roll=%.2f", offs[0], offs[1]);
+    }
+    nvs_close(h);
+}
+
+static void storage_save(void) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    pid_gains_t gains;
+    float offs[2];
+    xSemaphoreTake(g_state_mtx, portMAX_DELAY);
+    gains   = g_gains;
+    offs[0] = g_pitch_offset;
+    offs[1] = g_roll_offset;
+    xSemaphoreGive(g_state_mtx);
+    nvs_set_blob(h, "gains", &gains, sizeof(gains));
+    nvs_set_blob(h, "offs",  offs,   sizeof(offs));
+    nvs_commit(h);
+    nvs_close(h);
+    ESP_LOGI(TAG, "NVS save: gains + offsets");
+}
+
+static void storage_task(void *p) {
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        if (g_persist_dirty) {
+            g_persist_dirty = false;
+            storage_save();
+        }
+    }
 }
 
 void api_telemetry_json(char *buf, size_t n) {
@@ -390,12 +450,15 @@ void app_main(void) {
     g_state_mtx = xSemaphoreCreateMutex();
     g_cmd_q     = xQueueCreate(8, sizeof(motor_cmd_t));
 
+    storage_load();
+
     i2c_master_init();
     init_escs();
     init_wifi();
     ws_server_start();
 
-    xTaskCreate(blink_task, "blink", 1024, NULL, 5, NULL);
-    xTaskCreate(imu_task,   "imu",   4096, NULL, 6, NULL);
-    xTaskCreate(motor_task, "motor", 4096, NULL, 5, NULL);
+    xTaskCreate(blink_task,   "blink",   1024, NULL, 5, NULL);
+    xTaskCreate(imu_task,     "imu",     4096, NULL, 6, NULL);
+    xTaskCreate(motor_task,   "motor",   4096, NULL, 5, NULL);
+    xTaskCreate(storage_task, "storage", 3072, NULL, 3, NULL);
 }
