@@ -33,6 +33,7 @@
 #define MOTOR_MAX         1200
 
 #define INTEGRAL_LIMIT    400.0f
+#define D_LPF_ALPHA       0.2f   // 0..1; menor = más suave, más lag. 0.2 con dt=20ms ≈ corte ~10 Hz
 
 static const char *TAG = "main";
 
@@ -59,6 +60,7 @@ static SemaphoreHandle_t g_state_mtx;
 typedef struct {
     float integral;
     float prev_error;
+    float d_filt;
 } pid_state_t;
 
 static pid_state_t g_pid_p, g_pid_r, g_pid_y;
@@ -97,16 +99,17 @@ static void all_motors_off(void) {
 }
 
 static void pid_reset_all(void) {
-    g_pid_p.integral = 0; g_pid_p.prev_error = 0;
-    g_pid_r.integral = 0; g_pid_r.prev_error = 0;
-    g_pid_y.integral = 0; g_pid_y.prev_error = 0;
+    g_pid_p.integral = 0; g_pid_p.prev_error = 0; g_pid_p.d_filt = 0;
+    g_pid_r.integral = 0; g_pid_r.prev_error = 0; g_pid_r.d_filt = 0;
+    g_pid_y.integral = 0; g_pid_y.prev_error = 0; g_pid_y.d_filt = 0;
 }
 
 static float pid_step(pid_state_t *s, float error, float kp, float ki, float kd, float dt) {
     s->integral = clampf(s->integral + error * dt, -INTEGRAL_LIMIT, INTEGRAL_LIMIT);
     float derivative = (error - s->prev_error) / dt;
     s->prev_error = error;
-    return kp * error + ki * s->integral + kd * derivative;
+    s->d_filt += D_LPF_ALPHA * (derivative - s->d_filt);
+    return kp * error + ki * s->integral + kd * s->d_filt;
 }
 
 bool api_get_full_stop(void) { return g_full_stop; }
@@ -405,10 +408,11 @@ static void imu_task(void *p) {
     imuInit(&m, &prs);
 
     TickType_t last = xTaskGetTickCount();
+    uint8_t baro_div = 0;
     while (1) {
         vTaskDelayUntil(&last, pdMS_TO_TICKS(CTRL_DT_MS));
         imuDataGet(&a, &gy, &ac, &mg);
-        pressSensorDataGet(&T, &P, &alt);
+        if (++baro_div >= 5) { baro_div = 0; pressSensorDataGet(&T, &P, &alt); }
         xSemaphoreTake(g_state_mtx, portMAX_DELAY);
         float po = g_pitch_offset;
         float ro = g_roll_offset;
@@ -458,7 +462,7 @@ void app_main(void) {
     ws_server_start();
 
     xTaskCreate(blink_task,   "blink",   1024, NULL, 5, NULL);
-    xTaskCreate(imu_task,     "imu",     4096, NULL, 6, NULL);
+    xTaskCreatePinnedToCore(imu_task, "imu", 4096, NULL, 10, NULL, 1); // core 1, prio alta, lejos de WiFi
     xTaskCreate(motor_task,   "motor",   4096, NULL, 5, NULL);
     xTaskCreate(storage_task, "storage", 3072, NULL, 3, NULL);
 }

@@ -241,7 +241,7 @@ void imuAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, f
   float hx, hy, hz, bx, bz;
   float vx, vy, vz, wx, wy, wz;
   float exInt = 0.0, eyInt = 0.0, ezInt = 0.0;
-  float ex, ey, ez, halfT = 0.024f;
+  float ex, ey, ez, halfT = 0.010f; // dt/2 — debe coincidir con CTRL_DT_MS en main.c
 
   float q0q0 = q0 * q0;
   float q0q1 = q0 * q1;
@@ -335,10 +335,10 @@ void icm20948init(void)
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_2);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_GYRO_SMPLRT_DIV, 0x07);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_GYRO_CONFIG_1,
-                 REG_VAL_BIT_GYRO_DLPCFG_6 | REG_VAL_BIT_GYRO_FS_1000DPS | REG_VAL_BIT_GYRO_DLPF);
+                 REG_VAL_BIT_GYRO_DLPCFG_2 | REG_VAL_BIT_GYRO_FS_1000DPS | REG_VAL_BIT_GYRO_DLPF);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_ACCEL_SMPLRT_DIV_2, 0x07);
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_ACCEL_CONFIG,
-                 REG_VAL_BIT_ACCEL_DLPCFG_6 | REG_VAL_BIT_ACCEL_FS_2g | REG_VAL_BIT_ACCEL_DLPF);
+                 REG_VAL_BIT_ACCEL_DLPCFG_2 | REG_VAL_BIT_ACCEL_FS_2g | REG_VAL_BIT_ACCEL_DLPF);
 
   /* user bank 0 register */
   i2c_write_byte(I2C_ADD_ICM20948, REG_ADD_REG_BANK_SEL, REG_VAL_REG_BANK_0);
